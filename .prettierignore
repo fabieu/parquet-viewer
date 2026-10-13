@@ -1,0 +1,5 @@
+dist
+src-tauri
+src/licenses
+package-lock.json
+*.md
