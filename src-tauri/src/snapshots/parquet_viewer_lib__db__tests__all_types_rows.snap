@@ -1,0 +1,63 @@
+---
+source: src/db.rs
+expression: named
+---
+[
+  {
+    "bigint_col": 42,
+    "bigint_unsafe": "9007199254740993",
+    "blob_col": "0x00ff",
+    "bool_col": true,
+    "date_col": "2024-02-29",
+    "decimal_col": "123.45",
+    "double_col": 2.25,
+    "float_col": 1.5,
+    "hugeint_stored_as_double": 170141183460469230000000000000000000000.0,
+    "int_col": 3,
+    "list_col": [
+      1,
+      2,
+      3
+    ],
+    "map_col": {
+      "k": 1.5
+    },
+    "nan_col": "NaN",
+    "smallint_col": 2,
+    "struct_col": {
+      "a": 1,
+      "b": "x"
+    },
+    "time_col": "13:14:15",
+    "tinyint_col": 1,
+    "ts_col": "2024-01-02T03:04:05.123456",
+    "tstz_col": "2024-01-02T03:04:05+00",
+    "ubigint_col": "18446744073709551615",
+    "uuid_col": "0b1f9a0e-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+    "varchar_col": "text"
+  },
+  {
+    "bigint_col": null,
+    "bigint_unsafe": null,
+    "blob_col": null,
+    "bool_col": null,
+    "date_col": null,
+    "decimal_col": null,
+    "double_col": null,
+    "float_col": null,
+    "hugeint_stored_as_double": null,
+    "int_col": null,
+    "list_col": null,
+    "map_col": null,
+    "nan_col": null,
+    "smallint_col": null,
+    "struct_col": null,
+    "time_col": null,
+    "tinyint_col": null,
+    "ts_col": null,
+    "tstz_col": null,
+    "ubigint_col": null,
+    "uuid_col": null,
+    "varchar_col": null
+  }
+]
