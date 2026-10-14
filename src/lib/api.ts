@@ -10,6 +10,7 @@ export interface FileInfo {
   rowCount: number;
   rowGroups: number;
   createdBy: string | null;
+  compression: string[];
 }
 
 export interface OpenedFile {
@@ -45,7 +46,14 @@ export interface ColumnStats {
 }
 
 export type ErrorKind =
-  "FileNotFound" | "NotParquet" | "QueryFailed" | "UnknownFile" | "UnknownColumn" | "Cancelled" | "Io";
+  | "FileNotFound"
+  | "NotParquet"
+  | "UnsupportedCompression"
+  | "QueryFailed"
+  | "UnknownFile"
+  | "UnknownColumn"
+  | "Cancelled"
+  | "Io";
 
 /** An error returned by a Rust command. */
 export class AppError extends Error {

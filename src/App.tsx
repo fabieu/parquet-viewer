@@ -26,6 +26,8 @@ function describeError(e: unknown): string {
         return `The file could not be found. ${e.message}`;
       case "NotParquet":
         return `This is not a Parquet file. ${e.message}`;
+      case "UnsupportedCompression":
+        return `This file uses ${e.message} compression, which is not supported.`;
       default:
         return e.message;
     }
@@ -279,6 +281,7 @@ export default function App() {
               {hiddenColumns.size > 0
                 ? `${formatCount(file.columns.length - hiddenColumns.size)} of ${formatCount(file.columns.length)} columns`
                 : `${formatCount(file.columns.length)} columns`}
+              {file.info.compression.length > 0 && ` · ${file.info.compression.join(", ")}`}
             </span>
           </footer>
         </>
