@@ -38,12 +38,12 @@ pub fn run() {
         .run(|_app, _event| {
             // macOS delivers file associations as an event instead of an argument.
             #[cfg(any(target_os = "macos", target_os = "ios"))]
-            if let tauri::RunEvent::Opened { urls } = _event {
-                if let Some(path) = urls.into_iter().find_map(|u| u.to_file_path().ok()) {
-                    let path = path.to_string_lossy().into_owned();
-                    *_app.state::<PendingOpen>().0.lock().unwrap() = Some(path.clone());
-                    let _ = _app.emit("open-file", path);
-                }
+            if let tauri::RunEvent::Opened { urls } = _event
+                && let Some(path) = urls.into_iter().find_map(|u| u.to_file_path().ok())
+            {
+                let path = path.to_string_lossy().into_owned();
+                *_app.state::<PendingOpen>().0.lock().unwrap() = Some(path.clone());
+                let _ = _app.emit("open-file", path);
             }
         });
 }
