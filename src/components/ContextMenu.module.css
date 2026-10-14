@@ -5,8 +5,7 @@
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  background: var(--surface);
 }
 
 .menu button {
@@ -17,7 +16,8 @@
   border: none;
   background: none;
   text-align: left;
-  padding: 5px 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
 }
 
 .menu button:focus-visible {

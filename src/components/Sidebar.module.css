@@ -2,15 +2,12 @@
   flex-shrink: 0;
   overflow-y: auto;
   border-right: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 16px;
+  background: var(--bg);
 }
 
 .sidebar h2 {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  margin: 6px 0 8px;
+  margin: 4px 0 12px;
 }
 
 .hint {
@@ -23,7 +20,7 @@
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 4px 10px;
-  margin: 0 0 12px;
+  margin: 0 0 24px;
 }
 
 .facts dt {
@@ -32,6 +29,7 @@
 
 .facts dd {
   margin: 0;
+  color: var(--heading);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -39,7 +37,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.facts dd.path {
+.facts dd.path,
+.colDetails dd {
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -62,15 +61,16 @@
   min-width: 0;
   gap: 8px;
   justify-content: space-between;
+  align-items: baseline;
   border: none;
   border-radius: var(--radius);
   background: none;
   text-align: left;
-  padding: 4px 6px;
+  padding: 6px 8px;
 }
 
 .schema li.selected .colRow button {
-  background: var(--bg-subtle);
+  background: var(--surface);
 }
 
 .colName {
@@ -81,15 +81,18 @@
 
 .colType {
   color: var(--text-muted);
-  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .colDetails {
-  padding: 6px 6px 4px 12px;
+  margin: 4px 0 8px 22px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
   font-size: 13px;
 }
