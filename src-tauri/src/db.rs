@@ -54,9 +54,9 @@ struct OpenFile {
     has_file_row: bool,
     /// Uncompressed size of all column chunks, to estimate a full copy.
     uncompressed_bytes: u64,
-    /// SELECT list (columns qualified as `s.…`) and per-column fetch kinds,
+    /// Per-column SELECT expressions (qualified as `s.…`) and fetch kinds,
     /// built once for `rows`.
-    select: String,
+    exprs: Vec<String>,
     kinds: Vec<Kind>,
     view: Option<Materialized>,
 }
@@ -195,12 +195,11 @@ impl Engine {
 
         let columns = self.describe(&src, has_file_row, &physical)?;
         let kinds: Vec<Kind> = columns.iter().map(|c| kind_of(&c.duckdb_type)).collect();
-        let select = columns
+        let exprs = columns
             .iter()
             .zip(&kinds)
             .map(|(c, k)| select_expr(c, *k))
-            .collect::<Vec<_>>()
-            .join(", ");
+            .collect();
         let info = FileInfo {
             path: path.to_string(),
             size_bytes,
@@ -217,7 +216,7 @@ impl Engine {
                 src,
                 has_file_row,
                 uncompressed_bytes,
-                select,
+                exprs,
                 kinds,
                 view: None,
             },
@@ -317,11 +316,37 @@ impl Engine {
         Ok(self.file(id)?.columns.clone())
     }
 
-    pub fn rows(&mut self, id: FileId, offset: u64, limit: u64, view: &View) -> AppResult<Page> {
+    /// Rows `offset..offset + limit` of `view`, with the values of
+    /// `columns` (indices into the schema) in that order. Reading fewer
+    /// columns is much cheaper, since DuckDB decodes whole column chunks.
+    pub fn rows(
+        &mut self,
+        id: FileId,
+        offset: u64,
+        limit: u64,
+        view: &View,
+        columns: &[usize],
+    ) -> AppResult<Page> {
         let limit = limit.min(MAX_PAGE_ROWS);
+        let f = self.file(id)?;
+        let mut exprs = Vec::with_capacity(columns.len());
+        let mut kinds = Vec::with_capacity(columns.len());
+        for &i in columns {
+            let expr = f
+                .exprs
+                .get(i)
+                .ok_or_else(|| AppError::UnknownColumn(i.to_string()))?;
+            exprs.push(expr.as_str());
+            kinds.push(f.kinds[i]);
+        }
+        // Without columns, a row is empty but the row count still counts.
+        let select = if exprs.is_empty() {
+            "NULL".to_string()
+        } else {
+            exprs.join(", ")
+        };
         let (source, total) = self.source_for(id, view)?;
         let f = self.file(id)?;
-        let select = &f.select;
         let end = offset.saturating_add(limit);
 
         // Page by a row-number range so DuckDB can skip row groups instead
@@ -352,7 +377,7 @@ impl Engine {
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt
             .query_map([], |r| {
-                f.kinds
+                kinds
                     .iter()
                     .enumerate()
                     .map(|(i, k)| read_value(r, i, *k))
@@ -768,6 +793,7 @@ impl Db {
         offset: u64,
         limit: u64,
         view: View,
+        columns: Vec<usize>,
     ) -> AppResult<Page> {
         if let Some(seq) = seq {
             {
@@ -792,7 +818,7 @@ impl Db {
                     return Err(AppError::Cancelled);
                 }
             }
-            engine.rows(id, offset, limit, &view)
+            engine.rows(id, offset, limit, &view, &columns)
         })
         .await
     }

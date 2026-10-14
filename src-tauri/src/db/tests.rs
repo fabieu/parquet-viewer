@@ -44,6 +44,12 @@ fn view(clause: &str) -> View {
     }
 }
 
+/// Rows of `view` with every column.
+fn all_rows(e: &mut Engine, id: FileId, offset: u64, limit: u64, view: &View) -> AppResult<Page> {
+    let all: Vec<usize> = (0..e.files[&id].exprs.len()).collect();
+    e.rows(id, offset, limit, view, &all)
+}
+
 fn ids(page: &Page) -> Vec<i64> {
     page.rows.iter().map(|r| r[0].as_i64().unwrap()).collect()
 }
@@ -74,7 +80,7 @@ fn maps_every_type_to_json() {
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
     let schema = e.schema(id).unwrap();
-    let page = e.rows(id, 0, 10, &View::default()).unwrap();
+    let page = all_rows(&mut e, id, 0, 10, &View::default()).unwrap();
     assert_eq!(page.total_rows, 2);
 
     let named: Vec<serde_json::Map<String, Json>> = page
@@ -99,9 +105,9 @@ fn pages_through_unsorted_file() {
     let path = numbers(dir.path());
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
-    let page = e.rows(id, 2500, 3, &View::default()).unwrap();
+    let page = all_rows(&mut e, id, 2500, 3, &View::default()).unwrap();
     assert_eq!(ids(&page), [2500, 2501, 2502]);
-    let tail = e.rows(id, 4998, 500, &View::default()).unwrap();
+    let tail = all_rows(&mut e, id, 4998, 500, &View::default()).unwrap();
     assert_eq!(ids(&tail), [4998, 4999]);
 }
 
@@ -112,24 +118,22 @@ fn sorts_and_filters() {
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
 
-    let desc = e.rows(id, 0, 3, &view("ORDER BY id DESC")).unwrap();
+    let desc = all_rows(&mut e, id, 0, 3, &view("ORDER BY id DESC")).unwrap();
     assert_eq!(ids(&desc), [4999, 4998, 4997]);
     assert_eq!(desc.total_rows, 5000);
 
     // A filter on one column plus ORDER BY another used to trip a
     // DuckDB compressed-materialization assertion; see Engine::new.
     let v = view("WHERE bucket = 3 AND id >= 100 ORDER BY id");
-    let page = e.rows(id, 0, 3, &v).unwrap();
+    let page = all_rows(&mut e, id, 0, 3, &v).unwrap();
     assert_eq!(ids(&page), [101, 108, 115]);
     let expected = (100..5000).filter(|i| i % 7 == 3).count() as u64;
     assert_eq!(page.total_rows, expected);
-    let deep = e.rows(id, expected - 1, 10, &v).unwrap();
+    let deep = all_rows(&mut e, id, expected - 1, 10, &v).unwrap();
     assert_eq!(deep.rows.len(), 1);
 
     // Without ORDER BY, rows keep file order.
-    let contains = e
-        .rows(id, 0, 100, &view("WHERE label ILIKE '%row 499%'"))
-        .unwrap();
+    let contains = all_rows(&mut e, id, 0, 100, &view("WHERE label ILIKE '%row 499%'")).unwrap();
     assert_eq!(
         ids(&contains),
         [
@@ -145,13 +149,13 @@ fn invalid_sql_fails_and_keeps_the_previous_view() {
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
     let good = view("WHERE id < 3 ORDER BY id DESC");
-    e.rows(id, 0, 10, &good).unwrap();
+    all_rows(&mut e, id, 0, 10, &good).unwrap();
 
     for bad in ["WHERE", "WHERE nope = 1", "ORDER BY", "id > 1"] {
-        let err = e.rows(id, 0, 10, &view(bad)).unwrap_err();
+        let err = all_rows(&mut e, id, 0, 10, &view(bad)).unwrap_err();
         assert!(matches!(err, AppError::QueryFailed(_)), "{bad}: {err:?}");
     }
-    let err = e.rows(id, 0, 10, &view("WHERE nope = 1")).unwrap_err();
+    let err = all_rows(&mut e, id, 0, 10, &view("WHERE nope = 1")).unwrap_err();
     let AppError::QueryFailed(message) = err else {
         unreachable!()
     };
@@ -162,7 +166,7 @@ fn invalid_sql_fails_and_keeps_the_previous_view() {
     assert!(!message.contains("src_"), "{message}");
     // The last valid view is still materialized.
     assert_eq!(e.files[&id].view.as_ref().unwrap().key, good);
-    assert_eq!(ids(&e.rows(id, 0, 10, &good).unwrap()), [2, 1, 0]);
+    assert_eq!(ids(&all_rows(&mut e, id, 0, 10, &good).unwrap()), [2, 1, 0]);
 }
 
 #[test]
@@ -176,10 +180,16 @@ fn rejects_multiple_statements() {
         "WHERE true; SELECT 1",
         "WHERE true; COPY (SELECT 1) TO 'x.csv'",
     ] {
-        let err = e.rows(id, 0, 10, &view(bad)).unwrap_err();
+        let err = all_rows(&mut e, id, 0, 10, &view(bad)).unwrap_err();
         assert!(matches!(err, AppError::QueryFailed(_)), "{bad}: {err:?}");
     }
-    assert_eq!(e.rows(id, 0, 1, &View::default()).unwrap().rows.len(), 1);
+    assert_eq!(
+        all_rows(&mut e, id, 0, 1, &View::default())
+            .unwrap()
+            .rows
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -222,7 +232,7 @@ fn reads_every_codec_duckdb_writes() {
         let mut e = engine();
         let opened = e.open(path.to_str().unwrap()).unwrap();
         assert_eq!(opened.info.compression, [codec]);
-        let page = e.rows(opened.file_id, 98, 10, &View::default()).unwrap();
+        let page = all_rows(&mut e, opened.file_id, 98, 10, &View::default()).unwrap();
         assert_eq!(ids(&page), [98, 99], "{codec}");
     }
 }
@@ -240,9 +250,7 @@ fn handles_quotes_in_paths_and_names() {
     let schema = e.schema(id).unwrap();
     assert_eq!(schema[0].name, "we\"ird col");
     assert_eq!(schema[1].name, "file_row_number");
-    let page = e
-        .rows(id, 0, 10, &view("ORDER BY \"we\"\"ird col\" DESC"))
-        .unwrap();
+    let page = all_rows(&mut e, id, 0, 10, &view("ORDER BY \"we\"\"ird col\" DESC")).unwrap();
     assert_eq!(page.rows, vec![vec![Json::from(1), Json::from(2)]]);
 }
 
@@ -274,7 +282,7 @@ fn close_releases_file() {
     let path = numbers(dir.path());
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
-    e.rows(id, 0, 1, &view("ORDER BY id DESC")).unwrap();
+    all_rows(&mut e, id, 0, 1, &view("ORDER BY id DESC")).unwrap();
     e.close(id).unwrap();
     assert!(matches!(e.schema(id), Err(AppError::UnknownFile(_))));
 }
@@ -293,9 +301,9 @@ fn worker_skips_superseded_requests() {
             Ok(())
         });
         // join! polls in order, so both requests are queued before release.
-        let old = db.get_rows(id, Some(1), 0, 10, View::default());
-        let new = db.get_rows(id, Some(2), 10, 10, View::default());
-        let copy = db.get_rows(id, None, 20, 10, View::default());
+        let old = db.get_rows(id, Some(1), 0, 10, View::default(), vec![0]);
+        let new = db.get_rows(id, Some(2), 10, 10, View::default(), vec![0]);
+        let copy = db.get_rows(id, None, 20, 10, View::default(), vec![0]);
         let (busy, old, new, copy, ()) = tokio::join!(busy, old, new, copy, async {
             release.send(()).unwrap();
         });
@@ -316,13 +324,11 @@ fn pages_sorted_view_with_a_rowid_column() {
     );
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
-    let page = e.rows(id, 2, 3, &view("ORDER BY id DESC")).unwrap();
+    let page = all_rows(&mut e, id, 2, 3, &view("ORDER BY id DESC")).unwrap();
     assert_eq!(ids(&page), [7, 6, 5]);
 
     e.full_copy_budget = 0;
-    let page = e
-        .rows(id, 2, 3, &view("WHERE true ORDER BY id DESC"))
-        .unwrap();
+    let page = all_rows(&mut e, id, 2, 3, &view("WHERE true ORDER BY id DESC")).unwrap();
     assert!(e.files[&id].view.as_ref().unwrap().row_numbers);
     assert_eq!(page.rows[0], [Json::from(7), Json::from(93)]);
     assert_eq!(ids(&page), [7, 6, 5]);
@@ -337,33 +343,51 @@ fn keeps_row_numbers_for_filters_and_large_sorts() {
     let row_numbers = |e: &Engine| e.files[&id].view.as_ref().unwrap().row_numbers;
 
     // Filters keep file order, so they only ever store row numbers.
-    let page = e.rows(id, 1, 3, &view("WHERE bucket = 3")).unwrap();
+    let page = all_rows(&mut e, id, 1, 3, &view("WHERE bucket = 3")).unwrap();
     assert_eq!(ids(&page), [10, 17, 24]);
     assert!(row_numbers(&e));
 
     // Sorts are copied in full while the estimate fits the budget...
-    e.rows(id, 0, 1, &view("ORDER BY id DESC")).unwrap();
+    all_rows(&mut e, id, 0, 1, &view("ORDER BY id DESC")).unwrap();
     assert!(!row_numbers(&e));
 
     // ...including filtered sorts whose result fits, though the file does not.
     e.full_copy_budget = e.files[&id].uncompressed_bytes / 2;
     let v = view("WHERE bucket = 3 ORDER BY id DESC");
-    assert_eq!(ids(&e.rows(id, 0, 2, &v).unwrap()), [4994, 4987]);
+    assert_eq!(ids(&all_rows(&mut e, id, 0, 2, &v).unwrap()), [4994, 4987]);
     assert!(!row_numbers(&e));
-    e.rows(id, 0, 1, &view("ORDER BY id")).unwrap();
+    all_rows(&mut e, id, 0, 1, &view("ORDER BY id")).unwrap();
     assert!(row_numbers(&e));
 
     // Pages of row numbers come back in view order, across row groups.
     e.full_copy_budget = 0;
     let v = view("WHERE bucket = 3 ORDER BY id % 2, id DESC");
-    let page = e.rows(id, 0, 1000, &v).unwrap();
+    let page = all_rows(&mut e, id, 0, 1000, &v).unwrap();
     assert!(row_numbers(&e));
     let mut expected: Vec<i64> = (0..5000).filter(|i| i % 7 == 3).collect();
     expected.sort_by_key(|i| (i % 2, -i));
     assert_eq!(page.total_rows, expected.len() as u64);
     assert_eq!(ids(&page), expected);
-    let deep = e.rows(id, 400, 5, &v).unwrap();
+    let deep = all_rows(&mut e, id, 400, 5, &v).unwrap();
     assert_eq!(ids(&deep), expected[400..405]);
+}
+
+#[test]
+fn returns_only_the_requested_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let page = e.rows(id, 7, 1, &View::default(), &[2, 0]).unwrap();
+    assert_eq!(page.rows, [[Json::from("row 7"), Json::from(7)]]);
+
+    // Without columns the rows are empty, but the row count still loads.
+    let page = e.rows(id, 0, 2, &view("WHERE bucket = 3"), &[]).unwrap();
+    assert_eq!(page.rows, [[], []] as [[Json; 0]; 2]);
+    assert_eq!(page.total_rows, 714);
+
+    let err = e.rows(id, 0, 1, &View::default(), &[3]).unwrap_err();
+    assert!(matches!(err, AppError::UnknownColumn(_)), "{err:?}");
 }
 
 #[test]
@@ -412,18 +436,18 @@ fn bench_large_file() {
     let unsorted = View::default();
     for offset in [0, rows / 2, rows - 500] {
         let t = Instant::now();
-        let page = e.rows(id, offset, 500, &unsorted).unwrap();
+        let page = all_rows(&mut e, id, offset, 500, &unsorted).unwrap();
         assert_eq!(page.rows[0][0].as_i64().unwrap() as u64, offset);
         println!("unsorted page @ {offset}: {:?}", t.elapsed());
     }
 
     let sorted = view("ORDER BY scrambled DESC");
     let t = Instant::now();
-    e.rows(id, 0, 500, &sorted).unwrap();
+    all_rows(&mut e, id, 0, 500, &sorted).unwrap();
     println!("first sorted page (materialize): {:?}", t.elapsed());
     for offset in [0, rows / 2, rows - 500] {
         let t = Instant::now();
-        e.rows(id, offset, 500, &sorted).unwrap();
+        all_rows(&mut e, id, offset, 500, &sorted).unwrap();
         println!("sorted page @ {offset}: {:?}", t.elapsed());
     }
 
@@ -431,17 +455,17 @@ fn bench_large_file() {
     e.full_copy_budget = 0;
     let sorted = view("ORDER BY scrambled");
     let t = Instant::now();
-    e.rows(id, 0, 500, &sorted).unwrap();
+    all_rows(&mut e, id, 0, 500, &sorted).unwrap();
     println!("first sorted page (row numbers): {:?}", t.elapsed());
     for offset in [rows / 2, rows - 500] {
         let t = Instant::now();
-        e.rows(id, offset, 500, &sorted).unwrap();
+        all_rows(&mut e, id, offset, 500, &sorted).unwrap();
         println!("sorted page @ {offset} (row numbers): {:?}", t.elapsed());
     }
 
     let filtered = view("WHERE contains(label, '99')");
     let t = Instant::now();
-    let page = e.rows(id, 0, 500, &filtered).unwrap();
+    let page = all_rows(&mut e, id, 0, 500, &filtered).unwrap();
     println!(
         "first filtered page: {:?} ({} matches)",
         t.elapsed(),

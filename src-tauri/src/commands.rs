@@ -27,9 +27,11 @@ pub async fn get_rows(
     offset: u64,
     limit: u64,
     view: View,
+    columns: Vec<usize>,
     seq: Option<u64>,
 ) -> AppResult<Page> {
-    db.get_rows(file_id, seq, offset, limit, view).await
+    db.get_rows(file_id, seq, offset, limit, view, columns)
+        .await
 }
 
 #[tauri::command]

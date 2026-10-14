@@ -8,12 +8,12 @@ import DataEditor, {
   type Rectangle,
 } from "@glideapps/glide-data-grid";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { api, AppError, type CellValue, type Column, type FileId, type View } from "../lib/api";
-import { cellFactory, loadingCell } from "../lib/cells";
+import { api, AppError, type Column, type FileId, type View } from "../lib/api";
+import { cellFactory, copyText, loadingCell } from "../lib/cells";
 import { ContextMenu } from "./ContextMenu";
 import styles from "./DataView.module.css";
 import { trailingSort } from "../lib/clause";
-import { PAGE_SIZE, Pager } from "../lib/pager";
+import { PAGE_SIZE, Pager, type ColumnWindow } from "../lib/pager";
 import { GRID_THEME, NULL_COLOR } from "../lib/theme";
 
 /** Largest selection copied in one go. */
@@ -21,6 +21,10 @@ const MAX_COPY_ROWS = 10_000;
 const KEYBINDINGS = { copy: true, selectAll: true, search: false };
 /** Space below the last row, so the horizontal scrollbar does not cover it. */
 const BOTTOM_SPACE = 20;
+/** Columns fetched on each side of the visible ones, for short scrolls. */
+const COLUMN_MARGIN = 5;
+/** Default column width, also used to guess how many columns fit. */
+const COLUMN_WIDTH = 160;
 
 interface Props {
   fileId: FileId;
@@ -43,7 +47,14 @@ interface Props {
 export const DataView = memo(function DataView(props: Props) {
   const { fileId, columns, hiddenColumns, view, rows, running, onSort } = props;
   const gridRef = useRef<DataEditorRef>(null);
-  const visible = useRef<Rectangle>({ x: 0, y: 0, width: 1, height: 50 });
+  // Until the grid reports its region, assume a full window of columns, so
+  // the first fetch already covers them.
+  const visible = useRef<Rectangle>({
+    x: 0,
+    y: 0,
+    width: Math.ceil(window.innerWidth / COLUMN_WIDTH),
+    height: 50,
+  });
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -56,7 +67,7 @@ export const DataView = memo(function DataView(props: Props) {
   const pager = useMemo(() => {
     let loadedOnce = false;
     return new Pager({
-      fetchPage: (offset, limit, seq) => api.getRows(fileId, offset, limit, view, seq),
+      fetchRows: (offset, limit, columns, seq) => api.getRows(fileId, offset, limit, view, columns, seq),
       onLoad: (page, total) => {
         // The row count is the same for every page of a view.
         if (!loadedOnce) callbacks.current.onLoaded(view, total);
@@ -70,55 +81,59 @@ export const DataView = memo(function DataView(props: Props) {
     });
   }, [fileId, view]);
 
+  // Grid column index → index into `columns`; the one place grid indices
+  // are mapped back to file columns.
+  const shown = useMemo(
+    () => columns.flatMap((c, i) => (hiddenColumns.has(c.name) ? [] : [i])),
+    [columns, hiddenColumns],
+  );
+  const toCell = useMemo(() => cellFactory(columns, NULL_COLOR), [columns]);
+
+  // Reports the visible region to the pager, as file rows and columns.
+  const report = useCallback(() => {
+    const r = visible.current;
+    pager.setVisible(r.y, r.y + r.height, columnWindow(shown, r));
+  }, [pager, shown]);
+
   // A new view starts at the top.
   useEffect(() => {
     visible.current = { ...visible.current, y: 0 };
     gridRef.current?.scrollTo(0, 0);
     pager.resume();
-    pager.setVisible(0, visible.current.height);
-    pager.flush();
     return () => pager.pause();
   }, [pager]);
+
+  // A new view or set of shown columns loads right away.
+  useEffect(() => {
+    report();
+    pager.flush();
+  }, [pager, report]);
 
   const onVisibleRegionChanged = useCallback(
     (range: Rectangle) => {
       visible.current = range;
-      pager.setVisible(range.y, range.y + range.height);
+      report();
     },
-    [pager],
+    [report],
   );
-
-  // Grid column index → index into `columns` and each row's values.
-  const shown = useMemo(
-    () => columns.flatMap((c, i) => (hiddenColumns.has(c.name) ? [] : [i])),
-    [columns, hiddenColumns],
-  );
-
-  // The cell at grid column `col` of a row; the one place grid indices are
-  // mapped back to file columns.
-  const cellAt = useMemo(() => {
-    const toCell = cellFactory(columns, NULL_COLOR);
-    return (values: CellValue[], col: number) => toCell(values[shown[col]], shown[col]);
-  }, [columns, shown]);
 
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
-      const values = pager.getRow(row);
-      return values ? cellAt(values, col) : loadingCell;
+      const value = pager.getCell(row, shown[col]);
+      return value === undefined ? loadingCell : toCell(value, shown[col]);
     },
-    [pager, cellAt],
+    [pager, shown, toCell],
   );
 
   // Copy: use cached rows when possible, otherwise fetch the selection.
   const getCellsForSelection = useCallback(
     (rect: Rectangle) => {
-      const rowCells = (values: CellValue[]) =>
-        Array.from({ length: rect.width }, (_, i) => cellAt(values, rect.x + i));
+      const cols = shown.slice(rect.x, rect.x + rect.width);
       const fromCache: GridCell[][] = [];
       for (let row = rect.y; row < rect.y + rect.height; row++) {
-        const values = pager.getRow(row);
-        if (!values) break;
-        fromCache.push(rowCells(values));
+        const values = cols.map((c) => pager.getCell(row, c));
+        if (values.includes(undefined)) break;
+        fromCache.push(values.map((v, i) => toCell(v!, cols[i])));
       }
       if (fromCache.length === rect.height) return fromCache as CellArray;
 
@@ -131,11 +146,20 @@ export const DataView = memo(function DataView(props: Props) {
           callbacks.current.onError(error);
           throw error;
         }
-        const page = await api.getRows(fileId, rect.y, rect.height, view);
-        return page.rows.map(rowCells);
+        const page = await api.getRows(fileId, rect.y, rect.height, view, cols);
+        const cells = page.rows.map((values) => values.map((v, i) => toCell(v, cols[i])));
+        // The grid writes awaited cells to the copy event, which has ended
+        // by now, so the clipboard would silently stay unchanged.
+        try {
+          await navigator.clipboard.writeText(copyText(cells));
+        } catch (e) {
+          callbacks.current.onError(new AppError("QueryFailed", `Copy failed: ${String(e)}`));
+          throw e;
+        }
+        return cells;
       };
     },
-    [pager, cellAt, fileId, view],
+    [pager, shown, toCell, fileId, view],
   );
 
   const sort = useMemo(() => trailingSort(view.clause), [view.clause]);
@@ -144,7 +168,7 @@ export const DataView = memo(function DataView(props: Props) {
       shown.map((i) => {
         const c = columns[i];
         const arrow = sort?.column === c.name ? (sort.descending ? " ▼" : " ▲") : "";
-        return { id: c.name, title: c.name + arrow, width: widths[c.name] ?? 160 };
+        return { id: c.name, title: c.name + arrow, width: widths[c.name] ?? COLUMN_WIDTH };
       }),
     [columns, shown, sort, widths],
   );
@@ -227,6 +251,15 @@ export const DataView = memo(function DataView(props: Props) {
     </div>
   );
 });
+
+/** The file columns visible in `range`, and those to fetch around them. */
+function columnWindow(shown: number[], range: Rectangle): ColumnWindow {
+  const end = range.x + range.width;
+  return {
+    visible: shown.slice(range.x, end),
+    fetch: shown.slice(Math.max(0, range.x - COLUMN_MARGIN), end + COLUMN_MARGIN),
+  };
+}
 
 /** Redraws the visible cells that belong to a newly loaded page. */
 function redrawPage(grid: DataEditorRef | null, range: Rectangle, page: number, pageSize: number) {

@@ -86,9 +86,18 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 export const api = {
   openFile: (path: string) => call<OpenedFile>("open_file", { path }),
   getSchema: (fileId: FileId) => call<Column[]>("get_schema", { fileId }),
-  /** `seq` marks grid paging requests, which the backend may skip as stale. */
-  getRows: (fileId: FileId, offset: number, limit: number, view: View, seq?: number) =>
-    call<Page>("get_rows", { fileId, offset, limit, view, seq: seq ?? null }),
+  /**
+   * Rows with the values of `columns` (schema indices) in that order. `seq`
+   * marks grid paging requests, which the backend may skip as stale.
+   */
+  getRows: (
+    fileId: FileId,
+    offset: number,
+    limit: number,
+    view: View,
+    columns: readonly number[],
+    seq?: number,
+  ) => call<Page>("get_rows", { fileId, offset, limit, view, columns, seq: seq ?? null }),
   getColumnStats: (fileId: FileId, column: string) =>
     call<ColumnStats>("get_column_stats", { fileId, column }),
   closeFile: (fileId: FileId) => call<void>("close_file", { fileId }),
