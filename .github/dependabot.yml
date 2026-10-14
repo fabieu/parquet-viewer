@@ -1,0 +1,64 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "monthly"
+      time: "07:00"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+    assignees:
+      - "fabieu"
+    groups:
+      major-updates:
+        update-types:
+          - "major"
+      minor-updates:
+        update-types:
+          - "minor"
+          - "patch"
+      other-updates:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      time: "07:00"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+    assignees:
+      - "fabieu"
+    groups:
+      major-updates:
+        update-types:
+          - "major"
+      minor-updates:
+        update-types:
+          - "minor"
+          - "patch"
+      other-updates:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      time: "07:00"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+    assignees:
+      - "fabieu"
+    groups:
+      gh-actions:
+        patterns:
+          - "*"
