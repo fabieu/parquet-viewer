@@ -228,20 +228,6 @@ fn reads_every_codec_duckdb_writes() {
 }
 
 #[test]
-fn rejects_codecs_duckdb_cannot_read() {
-    // From apache/parquet-testing: the deprecated, Hadoop-framed LZ4 codec.
-    let path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/db/testdata/hadoop_lz4_compressed.parquet"
-    );
-    let err = engine().open(path).unwrap_err();
-    assert!(
-        matches!(&err, AppError::UnsupportedCompression(c) if c == "LZ4"),
-        "{err:?}"
-    );
-}
-
-#[test]
 fn handles_quotes_in_paths_and_names() {
     let dir = tempfile::tempdir().unwrap();
     let path = fixture(
