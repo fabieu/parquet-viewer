@@ -10,6 +10,7 @@ pub struct FileInfo {
     pub row_count: u64,
     pub row_groups: u64,
     pub created_by: Option<String>,
+    pub compression: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,6 +62,8 @@ pub enum AppError {
     FileNotFound(String),
     #[error("Not a Parquet file: {0}")]
     NotParquet(String),
+    #[error("Unsupported compression codec: {0}")]
+    UnsupportedCompression(String),
     #[error("Query failed: {0}")]
     QueryFailed(String),
     #[error("Unknown file id {0}")]

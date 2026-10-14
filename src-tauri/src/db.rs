@@ -17,6 +17,16 @@ use crate::model::{
     AppError, AppResult, Column, ColumnStats, FileId, FileInfo, OpenedFile, Page, View,
 };
 
+/// Compression codecs DuckDB can decode. The Parquet spec also has the
+/// deprecated `LZ4` (Hadoop-framed) and `LZO`, which it rejects.
+const SUPPORTED_CODECS: [&str; 6] = [
+    "UNCOMPRESSED",
+    "SNAPPY",
+    "GZIP",
+    "BROTLI",
+    "ZSTD",
+    "LZ4_RAW",
+];
 /// Pseudo column added by `read_parquet(..., file_row_number = true)`.
 const FILE_ROW: &str = "file_row_number";
 /// Upper bound for a single `get_rows` request.
@@ -132,6 +142,16 @@ impl Engine {
             )
             .map_err(|e| AppError::NotParquet(format!("{path}: {e}")))?;
 
+        let compression = self.compression(path)?;
+        let unsupported: Vec<&str> = compression
+            .iter()
+            .map(String::as_str)
+            .filter(|c| !SUPPORTED_CODECS.contains(c))
+            .collect();
+        if !unsupported.is_empty() {
+            return Err(AppError::UnsupportedCompression(unsupported.join(", ")));
+        }
+
         let physical = self.physical_schema(path)?;
         let has_file_row = !physical.iter().any(|p| p.name == FILE_ROW);
 
@@ -164,6 +184,7 @@ impl Engine {
             row_count: row_count as u64,
             row_groups: row_groups as u64,
             created_by,
+            compression,
         };
         self.files.insert(
             id,
@@ -178,6 +199,17 @@ impl Engine {
             },
         );
         Ok(OpenedFile { file_id: id, info })
+    }
+
+    /// Distinct compression codecs used by the file's column chunks.
+    fn compression(&self, path: &str) -> AppResult<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT compression FROM parquet_metadata(?) ORDER BY compression")?;
+        let codecs = stmt
+            .query_map([path], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        Ok(codecs)
     }
 
     /// Top-level columns from the Parquet footer, in file order.

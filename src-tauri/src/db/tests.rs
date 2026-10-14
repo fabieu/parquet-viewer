@@ -201,6 +201,47 @@ fn reports_missing_and_non_parquet_files() {
 }
 
 #[test]
+fn reads_every_codec_duckdb_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    for (option, codec) in [
+        ("uncompressed", "UNCOMPRESSED"),
+        ("snappy", "SNAPPY"),
+        ("gzip", "GZIP"),
+        ("brotli", "BROTLI"),
+        ("zstd", "ZSTD"),
+        ("lz4_raw", "LZ4_RAW"),
+    ] {
+        let path = dir.path().join(format!("{option}.parquet"));
+        Connection::open_in_memory()
+            .unwrap()
+            .execute_batch(&format!(
+                "COPY (SELECT i AS id FROM range(100) t(i)) TO {}                  (FORMAT parquet, COMPRESSION '{option}')",
+                sql_string(path.to_str().unwrap())
+            ))
+            .unwrap();
+        let mut e = engine();
+        let opened = e.open(path.to_str().unwrap()).unwrap();
+        assert_eq!(opened.info.compression, [codec]);
+        let page = e.rows(opened.file_id, 98, 10, &View::default()).unwrap();
+        assert_eq!(ids(&page), [98, 99], "{codec}");
+    }
+}
+
+#[test]
+fn rejects_codecs_duckdb_cannot_read() {
+    // From apache/parquet-testing: the deprecated, Hadoop-framed LZ4 codec.
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/db/testdata/hadoop_lz4_compressed.parquet"
+    );
+    let err = engine().open(path).unwrap_err();
+    assert!(
+        matches!(&err, AppError::UnsupportedCompression(c) if c == "LZ4"),
+        "{err:?}"
+    );
+}
+
+#[test]
 fn handles_quotes_in_paths_and_names() {
     let dir = tempfile::tempdir().unwrap();
     let path = fixture(
