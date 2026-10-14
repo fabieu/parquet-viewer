@@ -391,6 +391,77 @@ fn returns_only_the_requested_columns() {
 }
 
 #[test]
+fn exports_the_view_as_csv() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let out = dir.path().join("out.csv");
+    let out = out.to_str().unwrap();
+    // A trailing line comment must not swallow the rest of the COPY.
+    let v = view("WHERE id < 30 AND bucket = 3 ORDER BY id DESC -- newest first");
+    e.export(id, &v, &[2, 0], out).unwrap();
+    let csv = std::fs::read_to_string(out).unwrap();
+    assert_eq!(
+        csv.lines().collect::<Vec<_>>(),
+        ["label,id", "row 24,24", "row 17,17", "row 10,10", "row 3,3"]
+    );
+}
+
+#[test]
+fn exports_the_view_as_parquet() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let out = dir.path().join("out.parquet");
+    let out = out.to_str().unwrap();
+    e.export(id, &view("WHERE bucket = 3"), &[0, 1], out)
+        .unwrap();
+
+    let opened = e.open(out).unwrap();
+    assert_eq!(opened.info.row_count, 714);
+    let names: Vec<_> = e
+        .schema(opened.file_id)
+        .unwrap()
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    assert_eq!(names, ["id", "bucket"]);
+    let page = all_rows(&mut e, opened.file_id, 0, 2, &View::default()).unwrap();
+    assert_eq!(ids(&page), [3, 10]);
+}
+
+#[test]
+fn export_never_overwrites_the_open_file_or_runs_other_statements() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let before = std::fs::read(&path).unwrap();
+    let err = e.export(id, &View::default(), &[0], &path).unwrap_err();
+    assert!(matches!(err, AppError::Io(_)), "{err:?}");
+    let txt = dir.path().join("out.txt");
+    let err = e
+        .export(id, &View::default(), &[0], txt.to_str().unwrap())
+        .unwrap_err();
+    assert!(matches!(err, AppError::Io(_)) && !txt.exists(), "{err:?}");
+
+    let side = dir.path().join("side.csv");
+    let bad = format!(
+        "WHERE true; COPY (SELECT 1) TO {}",
+        sql_string(side.to_str().unwrap())
+    );
+    let out = dir.path().join("out.csv");
+    let err = e
+        .export(id, &view(&bad), &[0], out.to_str().unwrap())
+        .unwrap_err();
+    assert!(matches!(err, AppError::QueryFailed(_)), "{err:?}");
+    assert!(!side.exists() && !out.exists());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+#[test]
 fn parses_memory_settings() {
     assert_eq!(setting_bytes("1.5 KiB"), Some(1536));
     assert_eq!(setting_bytes("2.0 GiB"), Some(2 << 30));

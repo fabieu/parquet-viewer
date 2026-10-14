@@ -30,6 +30,7 @@ pub fn run() {
             commands::get_schema,
             commands::get_rows,
             commands::get_column_stats,
+            commands::export_view,
             commands::close_file,
             commands::take_pending_open,
         ])

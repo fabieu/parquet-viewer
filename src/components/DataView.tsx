@@ -29,8 +29,8 @@ const COLUMN_WIDTH = 160;
 interface Props {
   fileId: FileId;
   columns: Column[];
-  /** Columns left out of the grid. Rows still carry every column. */
-  hiddenColumns: ReadonlySet<string>;
+  /** Indices into `columns` of the grid's columns, in grid order. */
+  shown: readonly number[];
   view: View;
   /** Row count to show: the view's, or the previous one while it runs. */
   rows: number;
@@ -45,7 +45,7 @@ interface Props {
 }
 
 export const DataView = memo(function DataView(props: Props) {
-  const { fileId, columns, hiddenColumns, view, rows, running, onSort } = props;
+  const { fileId, columns, shown, view, rows, running, onSort } = props;
   const gridRef = useRef<DataEditorRef>(null);
   // Until the grid reports its region, assume a full window of columns, so
   // the first fetch already covers them.
@@ -81,12 +81,6 @@ export const DataView = memo(function DataView(props: Props) {
     });
   }, [fileId, view]);
 
-  // Grid column index → index into `columns`; the one place grid indices
-  // are mapped back to file columns.
-  const shown = useMemo(
-    () => columns.flatMap((c, i) => (hiddenColumns.has(c.name) ? [] : [i])),
-    [columns, hiddenColumns],
-  );
   const toCell = useMemo(() => cellFactory(columns, NULL_COLOR), [columns]);
 
   // Reports the visible region to the pager, as file rows and columns.
@@ -253,7 +247,7 @@ export const DataView = memo(function DataView(props: Props) {
 });
 
 /** The file columns visible in `range`, and those to fetch around them. */
-function columnWindow(shown: number[], range: Rectangle): ColumnWindow {
+function columnWindow(shown: readonly number[], range: Rectangle): ColumnWindow {
   const end = range.x + range.width;
   return {
     visible: shown.slice(range.x, end),

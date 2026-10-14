@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open } from "@tauri-apps/plugin-dialog";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import logo from "../src-tauri/icons/128x128.png";
 import styles from "./App.module.css";
 import { DataView } from "./components/DataView";
@@ -47,6 +47,9 @@ export default function App() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Name of the file being exported to.
+  const [exporting, setExporting] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(300);
@@ -69,6 +72,7 @@ export default function App() {
   const openPath = useCallback(async (path: string) => {
     setBusy(`Opening ${fileName(path)}…`);
     setError(null);
+    setNotice(null);
     try {
       const opened = await api.openFile(path);
       const columns = await api.getSchema(opened.fileId);
@@ -167,6 +171,39 @@ export default function App() {
     });
   }, []);
 
+  // Grid column index → index into `file.columns`; the one place grid
+  // indices are mapped back to file columns.
+  const shown = useMemo(
+    () => file?.columns.flatMap((c, i) => (hiddenColumns.has(c.name) ? [] : [i])) ?? [],
+    [file, hiddenColumns],
+  );
+
+  // Saves the view with its shown columns, in grid order. The backend picks
+  // the format from the file extension.
+  const exportView = async () => {
+    if (!file) return;
+    const stem = fileName(file.info.path).replace(/\.[^.]*$/, "");
+    const path = await save({
+      defaultPath: `${stem}-export.parquet`,
+      filters: [
+        { name: "Parquet", extensions: ["parquet"] },
+        { name: "CSV", extensions: ["csv"] },
+      ],
+    });
+    if (!path) return;
+    setError(null);
+    setNotice(null);
+    setExporting(fileName(path));
+    try {
+      await api.exportView(file.fileId, view, shown, path);
+      setNotice(`Exported ${formatCount(rows)} rows to ${path}`);
+    } catch (e) {
+      setError(describeError(e));
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const onLoaded = useCallback((view: View, rows: number) => setLoaded({ view, rows }), []);
 
   // The query failed before showing anything: explain why and go back to
@@ -229,6 +266,15 @@ export default function App() {
         </div>
       )}
 
+      {notice && (
+        <div className={styles.banner} role="status">
+          <span>{notice}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)}>
+            ×
+          </button>
+        </div>
+      )}
+
       {file ? (
         <>
           <QueryBar
@@ -237,6 +283,9 @@ export default function App() {
             onApply={applyClause}
             error={queryError}
             running={running}
+            onExport={exportView}
+            exporting={exporting}
+            canExport={!running && busy === null && exporting === null && shown.length > 0}
           />
           <main className={styles.content}>
             {/* Hidden rather than unmounted, so computed stats are kept. */}
@@ -263,7 +312,7 @@ export default function App() {
               key={`grid-${file.fileId}`}
               fileId={file.fileId}
               columns={file.columns}
-              hiddenColumns={hiddenColumns}
+              shown={shown}
               view={view}
               rows={rows}
               running={running}

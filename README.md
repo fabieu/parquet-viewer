@@ -28,21 +28,19 @@ Parquet Viewer opens Parquet files of any size in an instant and lets you scroll
 - **Column statistics on demand:** min, max and null count for any column.
 - **Choose which columns to show:** hide and show columns from the schema list.
 - **Copy cells and rows:** select a range and copy it to the clipboard.
+- **Export the current view:** save the filtered and sorted rows, with the columns you are showing, as Parquet or CSV.
 
 ## Installation
 
 Download the installer for your platform from the [latest release](https://github.com/fabieu/parquet-viewer/releases):
 
-| Platform | Package |
-| --- | --- |
-| Windows | `.msi` or `-setup.exe` |
-| macOS (Apple Silicon and Intel) | `.dmg` |
-| Linux | `.AppImage` or `.deb` |
+| Platform                        | Package                |
+|---------------------------------|------------------------|
+| Windows                         | `.msi` or `-setup.exe` |
+| macOS (Apple Silicon and Intel) | `.dmg`                 |
+| Linux                           | `.AppImage` or `.deb`  |
 
 The installer registers Parquet Viewer as a viewer for `.parquet` files.
-
-> [!WARNING]
-> The project is in early development and has so far been tested on Windows only. Builds are not code-signed yet, so Windows SmartScreen and macOS Gatekeeper may warn you before the first launch.
 
 ## Usage
 
@@ -77,6 +75,12 @@ Clicking a column header rewrites the `ORDER BY` part of the query for you. Clic
 ### Copying data
 
 Select cells, rows or columns in the grid and press <kbd>Ctrl</kbd>+<kbd>C</kbd>, or right-click and choose **Copy**. The data is copied as tab-separated text, ready to paste into a spreadsheet. A single copy is limited to 10,000 rows.
+
+### Exporting data
+
+Click **Export…** in the query bar to save the current view to a new file. The export contains the rows that match your query, in its sort order, and only the columns you have not hidden. Choose a name ending in `.parquet` to keep the column types, or `.csv` for a comma-separated file with a header row.
+
+Exporting has no row limit. The open file is never overwritten: choosing it as the export target shows an error.
 
 ## Building from source
 

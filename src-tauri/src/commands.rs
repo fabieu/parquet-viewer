@@ -44,6 +44,18 @@ pub async fn get_column_stats(
 }
 
 #[tauri::command]
+pub async fn export_view(
+    db: State<'_, Db>,
+    file_id: FileId,
+    view: View,
+    columns: Vec<usize>,
+    path: String,
+) -> AppResult<()> {
+    db.run(move |e| e.export(file_id, &view, &columns, &path))
+        .await
+}
+
+#[tauri::command]
 pub async fn close_file(db: State<'_, Db>, file_id: FileId) -> AppResult<()> {
     db.close(file_id).await
 }

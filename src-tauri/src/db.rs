@@ -504,6 +504,53 @@ impl Engine {
         })?)
     }
 
+    /// Writes `view` with the values of `columns` (indices into the schema)
+    /// to a new file at `path`, as Parquet or CSV by its extension. Never
+    /// writes over the open file itself.
+    pub fn export(&self, id: FileId, view: &View, columns: &[usize], path: &str) -> AppResult<()> {
+        let f = self.file(id)?;
+        let extension = std::path::Path::new(path)
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase());
+        let options = match extension.as_deref() {
+            Some("parquet") => "FORMAT parquet",
+            Some("csv") => "FORMAT csv, HEADER true",
+            _ => {
+                return Err(AppError::Io(
+                    "Choose a file name ending in .parquet or .csv".into(),
+                ));
+            }
+        };
+        let same_file = std::fs::canonicalize(path)
+            .ok()
+            .zip(std::fs::canonicalize(&f.info.path).ok())
+            .is_some_and(|(a, b)| a == b);
+        if same_file {
+            return Err(AppError::Io(
+                "Cannot export over the open file; choose another name".into(),
+            ));
+        }
+        let select = columns
+            .iter()
+            .map(|&i| {
+                f.columns
+                    .get(i)
+                    .map(|c| quote_ident(&c.name))
+                    .ok_or_else(|| AppError::UnknownColumn(i.to_string()))
+            })
+            .collect::<AppResult<Vec<_>>>()?
+            .join(", ");
+        let query = format!("SELECT {select} FROM {} {}", f.src, view.clause.trim());
+        check_clause(&self.conn, &f.src, &query)?;
+        // The newline ends a trailing `--` comment in the clause, which
+        // would otherwise swallow the rest of the statement.
+        self.conn.execute_batch(&format!(
+            "COPY ({query}\n) TO {} ({options})",
+            sql_string(path)
+        ))?;
+        Ok(())
+    }
+
     pub fn close(&mut self, id: FileId) -> AppResult<()> {
         let f = self.files.remove(&id).ok_or(AppError::UnknownFile(id))?;
         if let Some(m) = f.view {

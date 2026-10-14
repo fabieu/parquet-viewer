@@ -100,6 +100,12 @@ export const api = {
   ) => call<Page>("get_rows", { fileId, offset, limit, view, columns, seq: seq ?? null }),
   getColumnStats: (fileId: FileId, column: string) =>
     call<ColumnStats>("get_column_stats", { fileId, column }),
+  /**
+   * Writes `view` with the values of `columns` (schema indices) to `path`,
+   * as Parquet or CSV by its extension.
+   */
+  exportView: (fileId: FileId, view: View, columns: readonly number[], path: string) =>
+    call<void>("export_view", { fileId, view, columns, path }),
   closeFile: (fileId: FileId) => call<void>("close_file", { fileId }),
   takePendingOpen: () => call<string | null>("take_pending_open"),
 };

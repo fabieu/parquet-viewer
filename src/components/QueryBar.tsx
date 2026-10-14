@@ -8,10 +8,23 @@ interface Props {
   /** DuckDB's message for the last query, if it failed. */
   error: string | null;
   running: boolean;
+  onExport: () => void;
+  canExport: boolean;
+  /** Name of the file being exported to, if an export is running. */
+  exporting: string | null;
 }
 
 /** A free-text `WHERE … ORDER BY …` suffix, passed to DuckDB as is. */
-export function QueryBar({ draft, onDraftChange, onApply, error, running }: Props) {
+export function QueryBar({
+  draft,
+  onDraftChange,
+  onApply,
+  error,
+  running,
+  onExport,
+  canExport,
+  exporting,
+}: Props) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     onApply(draft);
@@ -34,8 +47,15 @@ export function QueryBar({ draft, onDraftChange, onApply, error, running }: Prop
           aria-invalid={error !== null}
           aria-describedby={error ? "query-error" : undefined}
         />
-        <button type="submit" className="primary" disabled={running}>
-          {running ? "Running…" : "Run"}
+        <button type="submit" className="primary" disabled={running} aria-busy={running}>
+          {running ? (
+            <>
+              <span className={styles.spinner} aria-hidden="true" />
+              Running…
+            </>
+          ) : (
+            "Run"
+          )}
         </button>
         <button
           type="button"
@@ -46,6 +66,22 @@ export function QueryBar({ draft, onDraftChange, onApply, error, running }: Prop
           }}
         >
           Clear
+        </button>
+        <button
+          type="button"
+          disabled={!canExport}
+          onClick={onExport}
+          title={exporting ? `Exporting to ${exporting}…` : "Save the rows and columns shown"}
+          aria-busy={exporting !== null}
+        >
+          {exporting ? (
+            <>
+              <span className={styles.spinner} aria-hidden="true" />
+              Exporting…
+            </>
+          ) : (
+            "Export…"
+          )}
         </button>
       </div>
       {error && (
