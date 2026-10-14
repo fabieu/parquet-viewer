@@ -1,0 +1,48 @@
+.about {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 20px;
+}
+
+.about::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.about h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.about h3 {
+  font-size: 14px;
+  margin: 18px 0 8px;
+}
+
+.about details {
+  border-top: 1px solid var(--border);
+  padding: 6px 0;
+}
+
+.about summary {
+  cursor: pointer;
+}
+
+.about pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-subtle);
+  padding: 8px;
+  border-radius: var(--radius);
+}
+
+.about form {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}

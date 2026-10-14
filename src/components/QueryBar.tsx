@@ -1,4 +1,5 @@
 import type { FormEvent } from "react";
+import styles from "./QueryBar.module.css";
 
 interface Props {
   draft: string;
@@ -17,14 +18,14 @@ export function QueryBar({ draft, onDraftChange, onApply, error, running }: Prop
   };
 
   return (
-    <form className="query-bar" onSubmit={submit}>
-      <div className="query-row">
-        <label htmlFor="query" className="query-prefix">
+    <form className={styles.queryBar} onSubmit={submit}>
+      <div className={styles.row}>
+        <label htmlFor="query" className={styles.prefix}>
           SELECT * FROM file
         </label>
         <input
           id="query"
-          className={error ? "invalid" : undefined}
+          className={error ? styles.invalid : undefined}
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
           placeholder="WHERE amount > 100 ORDER BY created_at DESC"
@@ -48,7 +49,7 @@ export function QueryBar({ draft, onDraftChange, onApply, error, running }: Prop
         </button>
       </div>
       {error && (
-        <p id="query-error" className="query-error" role="alert">
+        <p id="query-error" className={styles.error} role="alert">
           {error}
         </p>
       )}

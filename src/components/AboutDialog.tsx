@@ -4,6 +4,7 @@ import duckdb from "../licenses/duckdb.txt?raw";
 import glide from "../licenses/glide-data-grid.txt?raw";
 import react from "../licenses/react.txt?raw";
 import tauri from "../licenses/tauri.txt?raw";
+import styles from "./AboutDialog.module.css";
 
 const NOTICES = [
   { name: "DuckDB", license: "MIT", text: duckdb },
@@ -22,7 +23,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
   }, []);
 
   return (
-    <dialog ref={ref} className="about" onClose={onClose}>
+    <dialog ref={ref} className={styles.about} onClose={onClose}>
       <h2>Parquet Viewer {version}</h2>
       <p>A fast, read-only viewer for Parquet files.</p>
       <h3>Open source licenses</h3>

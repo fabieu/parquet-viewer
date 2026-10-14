@@ -1,0 +1,119 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app.dragging::after {
+  content: "Drop to open";
+  position: fixed;
+  inset: 8px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  font-size: 18px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.status {
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.banner span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.banner button {
+  border: none;
+  background: none;
+  font-size: 16px;
+  min-height: 0;
+  padding: 0 6px;
+}
+
+.banner.error {
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* Straddles the sidebar's right border. */
+.sidebarResize {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 6px;
+  margin: 0 -3px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebarResize:hover {
+  background: var(--border);
+}
+
+.statusbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.empty h1 {
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.empty p {
+  color: var(--text-muted);
+  margin: 0 0 16px;
+}

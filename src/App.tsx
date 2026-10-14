@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import "./App.css";
+import styles from "./App.module.css";
 import { AboutDialog } from "./components/AboutDialog";
 import { DataView } from "./components/DataView";
 import { QueryBar } from "./components/QueryBar";
@@ -11,6 +11,9 @@ import { api, AppError, EMPTY_VIEW, type Column, type OpenedFile, type View } fr
 import { cycleSort } from "./lib/clause";
 import { fileName, formatCount } from "./lib/format";
 import { useGridTheme } from "./lib/theme";
+
+const MIN_SIDEBAR_WIDTH = 200;
+const MIN_GRID_WIDTH = 200;
 
 interface LoadedFile extends OpenedFile {
   columns: Column[];
@@ -42,6 +45,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [hiddenColumns, setHiddenColumns] = useState<ReadonlySet<string>>(new Set());
   const [showAbout, setShowAbout] = useState(false);
   const { theme, nullColor } = useGridTheme();
 
@@ -67,6 +72,7 @@ export default function App() {
       const previous = fileRef.current;
       if (previous) api.closeFile(previous.fileId).catch(() => {});
       setFile({ ...opened, columns });
+      setHiddenColumns(new Set());
       setDraft("");
       setView(EMPTY_VIEW);
       setLoaded({ view: EMPTY_VIEW, rows: opened.info.rowCount });
@@ -125,6 +131,39 @@ export default function App() {
     [applyClause],
   );
 
+  // Dragging the handle right of the sidebar resizes it, keeping some room
+  // for both the sidebar and the grid. The width goes straight to the DOM
+  // while dragging and into state once at the end, so a drag does not
+  // re-render the app on every pointer move.
+  const startSidebarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const handle = e.currentTarget;
+    const sidebar = handle.previousElementSibling as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    let width = startWidth;
+    const move = (ev: PointerEvent) => {
+      const max = Math.max(MIN_SIDEBAR_WIDTH, window.innerWidth - MIN_GRID_WIDTH);
+      width = Math.min(max, Math.max(MIN_SIDEBAR_WIDTH, startWidth + ev.clientX - startX));
+      sidebar.style.width = `${width}px`;
+    };
+    const stop = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("lostpointercapture", stop);
+      setSidebarWidth(width);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("lostpointercapture", stop);
+  };
+
+  const toggleColumn = useCallback((name: string) => {
+    setHiddenColumns((h) => {
+      const next = new Set(h);
+      if (!next.delete(name)) next.add(name);
+      return next;
+    });
+  }, []);
+
   const onLoaded = useCallback((view: View, rows: number) => setLoaded({ view, rows }), []);
 
   // The query failed before showing anything: explain why and go back to
@@ -143,8 +182,8 @@ export default function App() {
   const rows = view.clause === "" ? (file?.info.rowCount ?? 0) : loaded.rows;
 
   return (
-    <div className={dragging ? "app dragging" : "app"}>
-      <header className="toolbar">
+    <div className={dragging ? `${styles.app} ${styles.dragging}` : styles.app}>
+      <header className={styles.toolbar}>
         <button type="button" className="primary" onClick={chooseFile}>
           Open…
         </button>
@@ -156,15 +195,15 @@ export default function App() {
         >
           Info
         </button>
-        <span className="spacer" />
-        {busy && <span className="status">{busy}</span>}
+        <span className={styles.spacer} />
+        {busy && <span className={styles.status}>{busy}</span>}
         <button type="button" onClick={() => setShowAbout(true)}>
           About
         </button>
       </header>
 
       {error && (
-        <div className="banner error" role="alert">
+        <div className={`${styles.banner} ${styles.error}`} role="alert">
           <span>{error}</span>
           <button type="button" aria-label="Dismiss" onClick={() => setError(null)}>
             ×
@@ -181,11 +220,32 @@ export default function App() {
             error={queryError}
             running={running}
           />
-          <main className="content">
+          <main className={styles.content}>
+            {/* Hidden rather than unmounted, so computed stats are kept. */}
+            <Sidebar
+              key={`sidebar-${file.fileId}`}
+              hidden={!showSidebar}
+              width={sidebarWidth}
+              fileId={file.fileId}
+              info={file.info}
+              columns={file.columns}
+              hiddenColumns={hiddenColumns}
+              onToggleColumn={toggleColumn}
+              onError={reportError}
+            />
+            <div
+              className={styles.sidebarResize}
+              hidden={!showSidebar}
+              onPointerDown={startSidebarResize}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize sidebar"
+            />
             <DataView
               key={`grid-${file.fileId}`}
               fileId={file.fileId}
               columns={file.columns}
+              hiddenColumns={hiddenColumns}
               view={view}
               rows={rows}
               running={running}
@@ -196,29 +256,22 @@ export default function App() {
               onViewError={onViewError}
               onError={reportError}
             />
-            {/* Hidden rather than unmounted, so computed stats are kept. */}
-            <Sidebar
-              key={`sidebar-${file.fileId}`}
-              hidden={!showSidebar}
-              fileId={file.fileId}
-              info={file.info}
-              columns={file.columns}
-              onError={reportError}
-            />
           </main>
-          <footer className="statusbar">
+          <footer className={styles.statusbar}>
             <span title={file.info.path}>{fileName(file.info.path)}</span>
             <span>
               {rows !== file.info.rowCount
                 ? `${formatCount(rows)} of ${formatCount(file.info.rowCount)} rows`
                 : `${formatCount(file.info.rowCount)} rows`}
               {" · "}
-              {formatCount(file.columns.length)} columns
+              {hiddenColumns.size > 0
+                ? `${formatCount(file.columns.length - hiddenColumns.size)} of ${formatCount(file.columns.length)} columns`
+                : `${formatCount(file.columns.length)} columns`}
             </span>
           </footer>
         </>
       ) : (
-        <main className="empty">
+        <main className={styles.empty}>
           <div>
             <h1>Parquet Viewer</h1>
             <p>Open a .parquet file or drop one here.</p>

@@ -8,6 +8,7 @@ const LIGHT: Partial<Theme> = {
   bgHeaderHovered: "#e8eaee",
   bgHeaderHasFocus: "#e2e5ea",
   fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  markerFontStyle: "13px",
 };
 
 const DARK: Partial<Theme> = {

@@ -1,0 +1,41 @@
+.queryBar {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prefix,
+.queryBar input,
+.error {
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 13px;
+}
+
+.prefix {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.queryBar input {
+  flex: 1;
+  min-width: 0;
+}
+
+.queryBar input.invalid {
+  border-color: var(--error-text);
+}
+
+.error {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--error-bg);
+  color: var(--error-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

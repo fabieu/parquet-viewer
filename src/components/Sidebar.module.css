@@ -1,0 +1,95 @@
+.sidebar {
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+.sidebar h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 6px 0 8px;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0 0 12px;
+}
+
+.facts dt {
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.facts dd.path {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.schema ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.colRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.schema li button {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  justify-content: space-between;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  text-align: left;
+  padding: 4px 6px;
+}
+
+.schema li.selected .colRow button {
+  background: var(--bg-subtle);
+}
+
+.colName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.colType {
+  color: var(--text-muted);
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 12px;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.colDetails {
+  padding: 6px 6px 4px 12px;
+  font-size: 13px;
+}
