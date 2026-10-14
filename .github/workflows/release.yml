@@ -88,7 +88,7 @@ jobs:
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: src-tauri
+          workspaces: packages/tauri
       - run: npm ci
       # Windows signing with Azure Artifact Signing. Unsigned builds are
       # produced while AZURE_CLIENT_ID is not set.
@@ -100,7 +100,7 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         run: |
           if [ -n "$AZURE_CLIENT_ID" ]; then
-            echo "args=--config src-tauri/tauri.windows-signing.conf.json" >> "$GITHUB_OUTPUT"
+            echo "args=--config packages/tauri/tauri.windows-signing.conf.json" >> "$GITHUB_OUTPUT"
           fi
       - name: Install artifact-signing-cli
         if: steps.win-signing.outputs.args != ''

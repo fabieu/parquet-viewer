@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import logo from "../src-tauri/icons/128x128.png";
+import logo from "../../tauri/icons/128x128.png";
 import styles from "./App.module.css";
 import { DataView } from "./components/DataView";
 import { QueryBar } from "./components/QueryBar";

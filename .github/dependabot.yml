@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "cargo"
-    directory: "/src-tauri"
+    directory: "/packages/tauri"
     schedule:
       interval: "monthly"
       time: "07:00"

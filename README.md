@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="" width="96" height="96">
+<img src="packages/tauri/icons/128x128.png" alt="" width="96" height="96">
 
 # Parquet Viewer
 
@@ -101,5 +101,5 @@ To run the checks:
 
 ```sh
 npm run lint && npm run format:check && npm test
-cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cd packages/tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```

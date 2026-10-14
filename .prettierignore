@@ -1,5 +1,5 @@
 dist
-src-tauri
+packages/tauri
 package-lock.json
 *.md
 THIRD_PARTY_LICENSES.json

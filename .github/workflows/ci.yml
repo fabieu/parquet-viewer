@@ -7,7 +7,7 @@ on:
   # before GitHub evicts unused caches.
   push:
     branches: [main]
-    paths: [src-tauri/Cargo.lock]
+    paths: [packages/tauri/Cargo.lock]
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
@@ -39,7 +39,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        working-directory: src-tauri
+        working-directory: packages/tauri
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Linux dependencies
@@ -57,12 +57,12 @@ jobs:
       # so pull request caches never evict the one every PR restores.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: src-tauri
+          workspaces: packages/tauri
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # tauri::generate_context! needs the frontend build output to exist.
       - name: Stub frontend dist
         shell: bash
-        run: mkdir -p ../dist
+        run: mkdir -p ../frontend/dist
       # Formatting is the same on every OS; clippy is not (cfg-gated code).
       - run: cargo fmt --check
         if: runner.os == 'Linux'

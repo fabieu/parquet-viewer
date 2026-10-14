@@ -4,41 +4,21 @@
   "license": "MIT",
   "version": "0.2.0",
   "type": "module",
+  "workspaces": [
+    "packages/frontend"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "npm run dev -w packages/frontend",
+    "build": "npm run build -w packages/frontend",
     "tauri": "tauri",
-    "test": "vitest run",
-    "lint": "eslint .",
+    "test": "npm test -w packages/frontend",
+    "lint": "npm run lint -w packages/frontend",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "licenses": "node scripts/licenses.mjs"
   },
-  "dependencies": {
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
-    "@glideapps/glide-data-grid": "^6.0.3",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2.8.2",
-    "lodash": "^4.18.1",
-    "marked": "^4.3.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-responsive-carousel": "^3.2.23"
-  },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2",
-    "@types/react": "^18.3.31",
-    "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react": "^6.0.2",
-    "eslint": "^10.12.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.13.0",
-    "prettier": "^3.9.10",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.71.2",
-    "vite": "^8.0.16",
-    "vitest": "^5.0.4"
+    "prettier": "^3.9.10"
   }
 }

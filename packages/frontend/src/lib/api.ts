@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-// Mirrors src-tauri/src/model.rs.
+// Mirrors packages/tauri/src/model.rs.
 
 export type FileId = number;
 

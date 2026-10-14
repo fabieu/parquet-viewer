@@ -8,17 +8,17 @@
       "extra-files": [
         {
           "type": "toml",
-          "path": "src-tauri/Cargo.toml",
+          "path": "packages/tauri/Cargo.toml",
           "jsonpath": "$.package.version"
         },
         {
           "type": "toml",
-          "path": "src-tauri/Cargo.lock",
+          "path": "packages/tauri/Cargo.lock",
           "jsonpath": "$.package[?(@.name.value === 'parquet-viewer')].version"
         },
         {
           "type": "json",
-          "path": "src-tauri/tauri.conf.json",
+          "path": "packages/tauri/tauri.conf.json",
           "jsonpath": "$.version"
         }
       ]
