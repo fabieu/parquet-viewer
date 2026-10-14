@@ -35,6 +35,10 @@ pub const MAX_PAGE_ROWS: u64 = 10_000;
 const BLOB_PREVIEW_BYTES: usize = 32;
 /// Largest integer a JavaScript number represents exactly.
 const MAX_SAFE_INT: i64 = (1 << 53) - 1;
+/// A sorted view is copied in full only while that copy is estimated to
+/// take at most this share of DuckDB's memory limit (see
+/// `Engine::source_for`).
+const FULL_COPY_SHARE: f64 = 0.125;
 
 // ---------------------------------------------------------------------------
 // Engine: owns the connection, runs on the worker thread
@@ -48,7 +52,10 @@ struct OpenFile {
     /// Whether `src` exposes `file_row_number` (false if the file has a real
     /// column of that name).
     has_file_row: bool,
-    /// SELECT list and per-column fetch kinds, built once for `rows`.
+    /// Uncompressed size of all column chunks, to estimate a full copy.
+    uncompressed_bytes: u64,
+    /// SELECT list (columns qualified as `s.…`) and per-column fetch kinds,
+    /// built once for `rows`.
     select: String,
     kinds: Vec<Kind>,
     view: Option<Materialized>,
@@ -57,7 +64,19 @@ struct OpenFile {
 struct Materialized {
     key: View,
     table: String,
+    /// Whether `table` holds only `file_row_number`s instead of all columns.
+    row_numbers: bool,
     total: u64,
+}
+
+impl Materialized {
+    fn source(&self) -> Source {
+        if self.row_numbers {
+            Source::RowNumbers(self.table.clone())
+        } else {
+            Source::Materialized(self.table.clone())
+        }
+    }
 }
 
 /// The materialization currently running, so a newer request for a
@@ -75,6 +94,7 @@ pub struct Engine {
     files: HashMap<FileId, OpenFile>,
     next_id: FileId,
     next_table: u64,
+    full_copy_budget: u64,
     running: RunningSlot,
 }
 
@@ -101,9 +121,11 @@ impl Engine {
         // Its default limit is 80% of RAM; scale that down to 50%.
         let default_limit: String =
             conn.query_row("SELECT current_setting('memory_limit')", [], |r| r.get(0))?;
-        if let Some(limit) = scale_memory_limit(&default_limit, 0.5 / 0.8) {
-            conn.execute_batch(&format!("SET memory_limit = '{limit}';"))?;
+        let limit = setting_bytes(&default_limit).map(|b| (b as f64 * 0.5 / 0.8) as u64);
+        if let Some(limit) = limit {
+            conn.execute_batch(&format!("SET memory_limit = '{limit}B';"))?;
         }
+        let full_copy_budget = (limit.unwrap_or(0) as f64 * FULL_COPY_SHARE) as u64;
         // Work around a DuckDB bug: with a filter on one column and ORDER BY
         // another, compressed materialization trusts Parquet statistics the
         // filter invalidated (debug builds assert `min_val <= input`; release
@@ -116,6 +138,7 @@ impl Engine {
             files: HashMap::new(),
             next_id: 1,
             next_table: 1,
+            full_copy_budget,
             running: RunningSlot::default(),
         })
     }
@@ -142,7 +165,7 @@ impl Engine {
             )
             .map_err(|e| AppError::NotParquet(format!("{path}: {e}")))?;
 
-        let compression = self.compression(path)?;
+        let (compression, uncompressed_bytes) = self.compression(path)?;
         let unsupported: Vec<&str> = compression
             .iter()
             .map(String::as_str)
@@ -193,6 +216,7 @@ impl Engine {
                 columns,
                 src,
                 has_file_row,
+                uncompressed_bytes,
                 select,
                 kinds,
                 view: None,
@@ -201,15 +225,20 @@ impl Engine {
         Ok(OpenedFile { file_id: id, info })
     }
 
-    /// Distinct compression codecs used by the file's column chunks.
-    fn compression(&self, path: &str) -> AppResult<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT DISTINCT compression FROM parquet_metadata(?) ORDER BY compression")?;
-        let codecs = stmt
-            .query_map([path], |r| r.get(0))?
-            .collect::<Result<_, _>>()?;
-        Ok(codecs)
+    /// Distinct compression codecs used by the file's column chunks, and
+    /// the chunks' total uncompressed size.
+    fn compression(&self, path: &str) -> AppResult<(Vec<String>, u64)> {
+        let mut stmt = self.conn.prepare(
+            "SELECT compression, CAST(sum(total_uncompressed_size) AS BIGINT)              FROM parquet_metadata(?) GROUP BY compression ORDER BY compression",
+        )?;
+        let chunks = stmt
+            .query_map([path], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let uncompressed = chunks.iter().map(|(_, size)| *size as u64).sum();
+        let codecs = chunks.into_iter().map(|(codec, _)| codec).collect();
+        Ok((codecs, uncompressed))
     }
 
     /// Top-level columns from the Parquet footer, in file order.
@@ -299,17 +328,23 @@ impl Engine {
         // of scanning everything before a deep OFFSET.
         let sql = match &source {
             Source::Materialized(table) if shadows_rowid(&f.columns) => {
-                format!("SELECT {select} FROM {table} LIMIT {limit} OFFSET {offset}")
+                format!("SELECT {select} FROM {table} s LIMIT {limit} OFFSET {offset}")
             }
             Source::Materialized(table) => format!(
-                "SELECT {select} FROM {table} WHERE rowid >= {offset} AND rowid < {end} ORDER BY rowid"
+                "SELECT {select} FROM {table} s WHERE rowid >= {offset} AND rowid < {end} ORDER BY rowid"
+            ),
+            // `select` is qualified, so a real `rowid` column cannot clash
+            // with `p.rowid`.
+            Source::RowNumbers(table) => format!(
+                "SELECT {select} FROM {table} p JOIN {} s ON s.{FILE_ROW} = p.{FILE_ROW}                  WHERE p.rowid >= {offset} AND p.rowid < {end} ORDER BY p.rowid",
+                f.src
             ),
             Source::File if f.has_file_row => format!(
-                "SELECT {select} FROM {} WHERE {FILE_ROW} >= {offset} AND {FILE_ROW} < {end} ORDER BY {FILE_ROW}",
+                "SELECT {select} FROM {} s WHERE {FILE_ROW} >= {offset} AND {FILE_ROW} < {end} ORDER BY {FILE_ROW}",
                 f.src
             ),
             Source::File => format!(
-                "SELECT {select} FROM {} LIMIT {limit} OFFSET {offset}",
+                "SELECT {select} FROM {} s LIMIT {limit} OFFSET {offset}",
                 f.src
             ),
         };
@@ -340,38 +375,68 @@ impl Engine {
             return Ok((Source::File, f.info.row_count));
         }
         if let Some(m) = f.view.as_ref().filter(|m| m.key == *view) {
-            return Ok((Source::Materialized(m.table.clone()), m.total));
+            return Ok((m.source(), m.total));
         }
 
         // The user's WHERE / ORDER BY text goes to DuckDB as is, but only
         // as part of a single SELECT (see `check_clause`).
         let query = format!("SELECT * FROM {} {clause}", f.src);
-        check_clause(&self.conn, &f.src, &query)?;
+        let sorted = check_clause(&self.conn, &f.src, &query)?;
+        let numbers = format!("SELECT {FILE_ROW} FROM {} {clause}", f.src);
+        let (has_file_row, file_rows, uncompressed) =
+            (f.has_file_row, f.info.row_count, f.uncompressed_bytes);
+        let budget = self.full_copy_budget;
+        // Estimates a full copy of `rows` rows from the file's average row.
+        let fits = |rows: u64| {
+            u128::from(uncompressed) * u128::from(rows)
+                <= u128::from(budget) * u128::from(file_rows)
+        };
         let table = format!("view_{id}_{}", self.next_table);
         self.next_table += 1;
         // The table is written in view order, so its `rowid` is the row's
-        // position in the view and pages are cheap `rowid` ranges.
+        // position in the view and pages are cheap `rowid` ranges. A full
+        // copy holds every column, which takes a lot of memory and time for
+        // large views, so where possible the table keeps only each row's
+        // `file_row_number` and pages read their rows from the file. That
+        // is cheap for filters, whose rows stay in file order, but sorted
+        // rows are scattered over the whole file, so sorts are still copied
+        // in full while the copy fits the budget.
+        let mut row_numbers = has_file_row && !(sorted && fits(file_rows));
+        let source = if row_numbers { &numbers } else { &query };
+        let mut total = self.create(id, view, &table, source)?;
+        // A filter may leave few enough rows to copy in full after all.
+        if row_numbers && sorted && fits(total) {
+            self.conn.execute_batch(&format!("DROP TABLE {table}"))?;
+            total = self.create(id, view, &table, &query)?;
+            row_numbers = false;
+        }
+        let m = Materialized {
+            key: view.clone(),
+            table,
+            row_numbers,
+            total,
+        };
+        let source = m.source();
+        // Keep one materialized view per file. The previous one is dropped
+        // only now, so after an invalid query the last valid view is still
+        // there to go back to.
+        let previous = self.files.get_mut(&id).and_then(|f| f.view.replace(m));
+        if let Some(old) = previous {
+            self.conn
+                .execute_batch(&format!("DROP TABLE IF EXISTS {}", old.table))?;
+        }
+        Ok((source, total))
+    }
+
+    /// Creates `table` from `query` (see `materialize`) and returns its row
+    /// count.
+    fn create(&self, id: FileId, view: &View, table: &str, query: &str) -> AppResult<u64> {
         self.materialize(id, view, &format!("CREATE TEMP TABLE {table} AS {query}"))?;
         // `execute` reports 0 rows for CREATE TABLE AS, so count them.
         let total: i64 =
             self.conn
                 .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?;
-        let total = total as u64;
-        // Keep one materialized view per file. The previous one is dropped
-        // only now, so after an invalid query the last valid view is still
-        // there to go back to.
-        let previous = self.files.get_mut(&id).and_then(|f| {
-            f.view.replace(Materialized {
-                key: view.clone(),
-                table: table.clone(),
-                total,
-            })
-        });
-        if let Some(old) = previous {
-            self.conn
-                .execute_batch(&format!("DROP TABLE IF EXISTS {}", old.table))?;
-        }
-        Ok((Source::Materialized(table), total))
+        Ok(total as u64)
     }
 
     /// Runs a `CREATE TABLE … AS` for `view`. A newer request for another
@@ -428,7 +493,10 @@ impl Engine {
 
 enum Source {
     File,
+    /// A table with all columns of the view.
     Materialized(String),
+    /// A table with the view's `file_row_number`s.
+    RowNumbers(String),
 }
 
 struct PhysicalColumn {
@@ -444,8 +512,9 @@ const ONE_STATEMENT: &str = "Only a WHERE / ORDER BY clause is allowed, without 
 /// rejects anything but exactly one SELECT. This matters because
 /// duckdb-rs's `prepare` silently executes every statement before the last,
 /// so `WHERE true; DROP …` would otherwise run. Errors name the source
-/// `file`, as the query bar shows it.
-fn check_clause(conn: &Connection, src: &str, query: &str) -> AppResult<()> {
+/// `file`, as the query bar shows it. Returns whether the query has an
+/// ORDER BY.
+fn check_clause(conn: &Connection, src: &str, query: &str) -> AppResult<bool> {
     // Same length as `src`, so DuckDB's `^` error marker stays aligned.
     let shown = format!("{:<width$}", "file", width = src.len());
     let fail = |message: &str| AppError::QueryFailed(message.replace(src, &shown));
@@ -470,7 +539,10 @@ fn check_clause(conn: &Connection, src: &str, query: &str) -> AppResult<()> {
     // A single statement, so preparing it only parses and binds: this
     // reports unknown columns and type errors before any work starts.
     conn.prepare(query).map_err(|e| fail(&e.to_string()))?;
-    Ok(())
+    let sorted = parsed["statements"][0]["node"]["modifiers"]
+        .as_array()
+        .is_some_and(|m| m.iter().any(|m| m["type"] == "ORDER_MODIFIER"));
+    Ok(sorted)
 }
 
 /// Checks the file exists and has the `PAR1` magic at both ends. Returns the
@@ -503,14 +575,14 @@ fn check_parquet_file(path: &str) -> AppResult<u64> {
 // SQL building
 // ---------------------------------------------------------------------------
 
-/// Scales a DuckDB memory setting such as `12.7 GiB` by `factor`.
-fn scale_memory_limit(setting: &str, factor: f64) -> Option<String> {
+/// Parses a DuckDB memory setting such as `12.7 GiB` into bytes.
+fn setting_bytes(setting: &str) -> Option<u64> {
     let (value, unit) = setting.trim().split_once(' ')?;
     let value: f64 = value.parse().ok()?;
-    if !unit.chars().all(|c| c.is_ascii_alphabetic()) {
-        return None;
-    }
-    Some(format!("{:.1} {unit}", value * factor))
+    let power = ["bytes", "KiB", "MiB", "GiB", "TiB", "PiB"]
+        .iter()
+        .position(|u| *u == unit)?;
+    Some((value * 1024f64.powi(power as i32)) as u64)
 }
 
 fn quote_ident(name: &str) -> String {
@@ -572,7 +644,7 @@ fn kind_of(duckdb_type: &str) -> Kind {
 }
 
 fn select_expr(col: &Column, kind: Kind) -> String {
-    let q = quote_ident(&col.name);
+    let q = format!("s.{}", quote_ident(&col.name));
     match kind {
         Kind::Bool | Kind::Int | Kind::Float | Kind::Blob => q,
         Kind::BigInt => format!("CAST({q} AS VARCHAR)"),

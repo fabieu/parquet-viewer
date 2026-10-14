@@ -318,6 +318,60 @@ fn pages_sorted_view_with_a_rowid_column() {
     let id = e.open(&path).unwrap().file_id;
     let page = e.rows(id, 2, 3, &view("ORDER BY id DESC")).unwrap();
     assert_eq!(ids(&page), [7, 6, 5]);
+
+    e.full_copy_budget = 0;
+    let page = e
+        .rows(id, 2, 3, &view("WHERE true ORDER BY id DESC"))
+        .unwrap();
+    assert!(e.files[&id].view.as_ref().unwrap().row_numbers);
+    assert_eq!(page.rows[0], [Json::from(7), Json::from(93)]);
+    assert_eq!(ids(&page), [7, 6, 5]);
+}
+
+#[test]
+fn keeps_row_numbers_for_filters_and_large_sorts() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let row_numbers = |e: &Engine| e.files[&id].view.as_ref().unwrap().row_numbers;
+
+    // Filters keep file order, so they only ever store row numbers.
+    let page = e.rows(id, 1, 3, &view("WHERE bucket = 3")).unwrap();
+    assert_eq!(ids(&page), [10, 17, 24]);
+    assert!(row_numbers(&e));
+
+    // Sorts are copied in full while the estimate fits the budget...
+    e.rows(id, 0, 1, &view("ORDER BY id DESC")).unwrap();
+    assert!(!row_numbers(&e));
+
+    // ...including filtered sorts whose result fits, though the file does not.
+    e.full_copy_budget = e.files[&id].uncompressed_bytes / 2;
+    let v = view("WHERE bucket = 3 ORDER BY id DESC");
+    assert_eq!(ids(&e.rows(id, 0, 2, &v).unwrap()), [4994, 4987]);
+    assert!(!row_numbers(&e));
+    e.rows(id, 0, 1, &view("ORDER BY id")).unwrap();
+    assert!(row_numbers(&e));
+
+    // Pages of row numbers come back in view order, across row groups.
+    e.full_copy_budget = 0;
+    let v = view("WHERE bucket = 3 ORDER BY id % 2, id DESC");
+    let page = e.rows(id, 0, 1000, &v).unwrap();
+    assert!(row_numbers(&e));
+    let mut expected: Vec<i64> = (0..5000).filter(|i| i % 7 == 3).collect();
+    expected.sort_by_key(|i| (i % 2, -i));
+    assert_eq!(page.total_rows, expected.len() as u64);
+    assert_eq!(ids(&page), expected);
+    let deep = e.rows(id, 400, 5, &v).unwrap();
+    assert_eq!(ids(&deep), expected[400..405]);
+}
+
+#[test]
+fn parses_memory_settings() {
+    assert_eq!(setting_bytes("1.5 KiB"), Some(1536));
+    assert_eq!(setting_bytes("2.0 GiB"), Some(2 << 30));
+    assert_eq!(setting_bytes("512 bytes"), Some(512));
+    assert_eq!(setting_bytes("lots"), None);
 }
 
 /// Timing check for the plan's performance gates. Run with
@@ -371,6 +425,18 @@ fn bench_large_file() {
         let t = Instant::now();
         e.rows(id, offset, 500, &sorted).unwrap();
         println!("sorted page @ {offset}: {:?}", t.elapsed());
+    }
+
+    // Force the row-number mode used for sorts over the copy budget.
+    e.full_copy_budget = 0;
+    let sorted = view("ORDER BY scrambled");
+    let t = Instant::now();
+    e.rows(id, 0, 500, &sorted).unwrap();
+    println!("first sorted page (row numbers): {:?}", t.elapsed());
+    for offset in [rows / 2, rows - 500] {
+        let t = Instant::now();
+        e.rows(id, offset, 500, &sorted).unwrap();
+        println!("sorted page @ {offset} (row numbers): {:?}", t.elapsed());
     }
 
     let filtered = view("WHERE contains(label, '99')");
