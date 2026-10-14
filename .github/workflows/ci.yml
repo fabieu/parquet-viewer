@@ -1,9 +1,15 @@
 name: CI
 
 on:
+  pull_request:
+  # Runs on main only to refresh the Rust cache that pull requests restore:
+  # after a dependency change, and weekly for new stable Rust releases and
+  # before GitHub evicts unused caches.
   push:
     branches: [main]
-  pull_request:
+    paths: [src-tauri/Cargo.lock]
+  schedule:
+    - cron: "0 4 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -47,10 +53,12 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
-      # The bundled DuckDB build takes minutes; cache it.
+      # The bundled DuckDB build takes minutes; cache it. Saved only on main,
+      # so pull request caches never evict the one every PR restores.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-tauri
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # tauri::generate_context! needs the frontend build output to exist.
       - name: Stub frontend dist
         shell: bash
