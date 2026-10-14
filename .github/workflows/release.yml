@@ -2,29 +2,60 @@ name: Release
 
 # release-please keeps a release PR up to date from Conventional Commits on
 # main. Merging it creates the tag and GitHub release; the build job then
-# attaches the installers. Both run here because a release created with
-# GITHUB_TOKEN does not trigger other workflows.
+# attaches the installers to that release.
 on:
   push:
     branches: [main]
+  # Manual lever: refresh the release PR, or rebuild the installers of an
+  # existing release (e.g. after a failed build).
+  workflow_dispatch:
+    inputs:
+      build_tag:
+        description: "Tag to rebuild, e.g. v0.2.0. Empty: only refresh the release PR."
+        type: string
+        default: ""
 
-permissions:
-  contents: write
-  pull-requests: write
+# One release run at a time; never cancel one that is uploading installers.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
-      release_id: ${{ steps.release.outputs.id }}
+      release_id: ${{ steps.release.outputs.id || steps.existing.outputs.id }}
+      tag: ${{ steps.release.outputs.tag_name || inputs.build_tag }}
     steps:
+      # A GitHub App token, unlike GITHUB_TOKEN, lets the release PR trigger CI.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      # On a push, inputs.build_tag is null, not '', so the event check is needed.
+      - name: Look up existing release
+        id: existing
+        if: github.event_name == 'workflow_dispatch' && inputs.build_tag != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ inputs.build_tag }}
+        run: echo "id=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json databaseId --jq .databaseId)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    if: >-
+      needs.release-please.outputs.release_created == 'true' ||
+      (github.event_name == 'workflow_dispatch' && inputs.build_tag != '')
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -37,7 +68,10 @@ jobs:
             args: ""
     runs-on: ${{ matrix.os }}
     steps:
+      # The tag, not the branch: main may already carry the next commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -58,7 +92,7 @@ jobs:
       - run: npm ci
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           # macOS signing and notarization. Unsigned builds are produced
           # while these secrets are not set.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
