@@ -46,7 +46,7 @@ export function Sidebar({
   return (
     <aside className={styles.sidebar} hidden={hidden} style={{ width }}>
       <section>
-        <h2>File</h2>
+        <h2 className="section-label">File</h2>
         <dl className={styles.facts}>
           <dt>Path</dt>
           <dd className={styles.path} title={info.path}>
@@ -69,7 +69,7 @@ export function Sidebar({
         </dl>
       </section>
       <section className={styles.schema}>
-        <h2>Schema</h2>
+        <h2 className="section-label">Schema</h2>
         <p className={styles.hint}>Tick the columns to show. Select a column to compute its statistics.</p>
         <ul>
           {columns.map((c) => {

@@ -1,40 +1,31 @@
+/* Dark only: near-black canvas, one electric-yellow accent, no shadows. */
 :root {
-  --bg: #ffffff;
-  --bg-subtle: #f4f5f7;
-  --bg-hover: #e8eaee;
-  --border: #dfe2e7;
-  --text: #1c1f24;
-  --text-muted: #6b7280;
-  --accent: #2563eb;
-  --accent-text: #ffffff;
-  --error-bg: #fdecec;
-  --error-text: #9f1c1c;
-  --radius: 6px;
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  --bg: #0a0a0a;
+  --bg-subtle: #121212;
+  --surface: #1a1a1a;
+  --bg-hover: #242424;
+  --border: #2a2a2a;
+  --border-strong: #3a3a3a;
+  --heading: #ffffff;
+  --text: #e6e6e6;
+  --text-body: #cccccc;
+  --text-muted: #888888;
+  --text-faint: #5a5a5a;
+  --accent: #faff69;
+  --accent-active: #e6eb52;
+  --accent-text: #0a0a0a;
+  --error-bg: rgba(239, 68, 68, 0.12);
+  --error-text: #f87171;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-family: var(--font-sans);
   font-size: 14px;
   color: var(--text);
   background: var(--bg);
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181c;
-    --bg-subtle: #1f2227;
-    --bg-hover: #2a2e35;
-    --border: #2f333a;
-    --text: #e6e8eb;
-    --text-muted: #8a909b;
-    --accent: #60a5fa;
-    --accent-text: #0b1220;
-    --error-bg: #3a1d1d;
-    --error-text: #fca5a5;
-  }
+  color-scheme: dark;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -55,26 +46,34 @@ body {
 
 button,
 select,
-input {
+input:not([type="checkbox"]) {
   font: inherit;
   color: inherit;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 4px 10px;
-  min-height: 28px;
+  padding: 6px 14px;
+  min-height: 32px;
 }
 
 button {
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 button:hover:not(:disabled) {
   background: var(--bg-hover);
 }
 
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: default;
 }
 
@@ -82,18 +81,54 @@ button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+  font-weight: 600;
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--accent);
-  filter: brightness(1.08);
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+button.large {
+  height: 40px;
+  padding: 0 20px;
+}
+
+input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .muted {
   color: var(--text-muted);
+}
+
+/* Small uppercase heading above a group, e.g. "Schema". */
+.section-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

@@ -1,5 +1,6 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useRef, useState } from "react";
+import logo from "../../src-tauri/icons/128x128.png";
 import duckdb from "../licenses/duckdb.txt?raw";
 import glide from "../licenses/glide-data-grid.txt?raw";
 import react from "../licenses/react.txt?raw";
@@ -23,20 +24,31 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
   }, []);
 
   return (
-    <dialog ref={ref} className={styles.about} onClose={onClose}>
-      <h2>Parquet Viewer {version}</h2>
-      <p>A fast, read-only viewer for Parquet files.</p>
-      <h3>Open source licenses</h3>
-      {NOTICES.map((n) => (
-        <details key={n.name}>
-          <summary>
-            {n.name} <span className="muted">({n.license})</span>
-          </summary>
-          <pre>{n.text}</pre>
-        </details>
-      ))}
-      <form method="dialog">
-        <button type="submit" autoFocus>
+    <dialog ref={ref} className={styles.about} onClose={onClose} aria-labelledby="about-title">
+      <header className={styles.header}>
+        <img src={logo} alt="" width={48} height={48} />
+        <div>
+          <h2 id="about-title">Parquet Viewer</h2>
+          <p>A fast, read-only viewer for Parquet files.</p>
+        </div>
+        {version && <span className={styles.version}>v{version}</span>}
+      </header>
+      <div className={styles.body}>
+        <h3 className="section-label">Open source licenses</h3>
+        <div className={styles.notices}>
+          {NOTICES.map((n) => (
+            <details key={n.name}>
+              <summary>
+                <span>{n.name}</span>
+                <span className={styles.license}>{n.license}</span>
+              </summary>
+              <pre>{n.text}</pre>
+            </details>
+          ))}
+        </div>
+      </div>
+      <form method="dialog" className={styles.footer}>
+        <button type="submit" className="primary large" autoFocus>
           Close
         </button>
       </form>

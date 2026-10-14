@@ -6,7 +6,6 @@ import DataEditor, {
   type GridColumn,
   type Item,
   type Rectangle,
-  type Theme,
 } from "@glideapps/glide-data-grid";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, AppError, type CellValue, type Column, type FileId, type View } from "../lib/api";
@@ -15,6 +14,7 @@ import { ContextMenu } from "./ContextMenu";
 import styles from "./DataView.module.css";
 import { trailingSort } from "../lib/clause";
 import { PAGE_SIZE, Pager } from "../lib/pager";
+import { GRID_THEME, NULL_COLOR } from "../lib/theme";
 
 /** Largest selection copied in one go. */
 const MAX_COPY_ROWS = 10_000;
@@ -32,8 +32,6 @@ interface Props {
   rows: number;
   /** The view's first page has not arrived yet. */
   running: boolean;
-  theme: Partial<Theme>;
-  nullColor: string;
   onSort: (column: string) => void;
   /** `view` answered with its first page; `rows` is its row count. */
   onLoaded: (view: View, rows: number) => void;
@@ -43,7 +41,7 @@ interface Props {
 }
 
 export const DataView = memo(function DataView(props: Props) {
-  const { fileId, columns, hiddenColumns, view, rows, running, theme, nullColor, onSort } = props;
+  const { fileId, columns, hiddenColumns, view, rows, running, onSort } = props;
   const gridRef = useRef<DataEditorRef>(null);
   const visible = useRef<Rectangle>({ x: 0, y: 0, width: 1, height: 50 });
   const [widths, setWidths] = useState<Record<string, number>>({});
@@ -99,9 +97,9 @@ export const DataView = memo(function DataView(props: Props) {
   // The cell at grid column `col` of a row; the one place grid indices are
   // mapped back to file columns.
   const cellAt = useMemo(() => {
-    const toCell = cellFactory(columns, nullColor);
+    const toCell = cellFactory(columns, NULL_COLOR);
     return (values: CellValue[], col: number) => toCell(values[shown[col]], shown[col]);
-  }, [columns, shown, nullColor]);
+  }, [columns, shown]);
 
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
@@ -201,7 +199,7 @@ export const DataView = memo(function DataView(props: Props) {
         smoothScrollY
         width="100%"
         height="100%"
-        theme={theme}
+        theme={GRID_THEME}
         keybindings={KEYBINDINGS}
       />
       {rows > 0 && shown.length > 0 && (

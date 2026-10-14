@@ -1,38 +1,51 @@
 .queryBar {
-  padding: 6px 10px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
 }
 
 .row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .prefix,
 .queryBar input,
 .error {
-  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 
 .prefix {
-  color: var(--text-muted);
+  color: var(--accent);
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .queryBar input {
   flex: 1;
   min-width: 0;
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+
+.queryBar input::placeholder {
+  color: var(--text-muted);
 }
 
 .queryBar input.invalid {
   border-color: var(--error-text);
 }
 
+.queryBar :is(input, button) {
+  height: 36px;
+}
+
 .error {
-  margin: 6px 0 0;
-  padding: 6px 8px;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--error-text) 30%, transparent);
   border-radius: var(--radius);
   background: var(--error-bg);
   color: var(--error-text);

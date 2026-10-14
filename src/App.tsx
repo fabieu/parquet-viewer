@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import logo from "../src-tauri/icons/128x128.png";
 import styles from "./App.module.css";
 import { AboutDialog } from "./components/AboutDialog";
 import { DataView } from "./components/DataView";
@@ -10,7 +11,6 @@ import { Sidebar } from "./components/Sidebar";
 import { api, AppError, EMPTY_VIEW, type Column, type OpenedFile, type View } from "./lib/api";
 import { cycleSort } from "./lib/clause";
 import { fileName, formatCount } from "./lib/format";
-import { useGridTheme } from "./lib/theme";
 
 const MIN_SIDEBAR_WIDTH = 200;
 const MIN_GRID_WIDTH = 200;
@@ -48,7 +48,6 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [hiddenColumns, setHiddenColumns] = useState<ReadonlySet<string>>(new Set());
   const [showAbout, setShowAbout] = useState(false);
-  const { theme, nullColor } = useGridTheme();
 
   // The open file, for closing it when the next one opens.
   const fileRef = useRef<LoadedFile | null>(null);
@@ -184,21 +183,36 @@ export default function App() {
   return (
     <div className={dragging ? `${styles.app} ${styles.dragging}` : styles.app}>
       <header className={styles.toolbar}>
-        <button type="button" className="primary" onClick={chooseFile}>
-          Open…
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowSidebar((s) => !s)}
-          disabled={!file}
-          aria-pressed={showSidebar}
-        >
-          Info
-        </button>
+        <div className={styles.brand}>
+          <img src={logo} alt="" width={24} height={24} />
+          <span>Parquet Viewer</span>
+        </div>
+        {file && (
+          <>
+            <span className={styles.divider} aria-hidden="true" />
+            <span className={styles.fileName} title={file.info.path}>
+              {fileName(file.info.path)}
+            </span>
+          </>
+        )}
         <span className={styles.spacer} />
         {busy && <span className={styles.status}>{busy}</span>}
-        <button type="button" onClick={() => setShowAbout(true)}>
-          About
+        <nav className={styles.navLinks}>
+          <button
+            type="button"
+            className={styles.navTab}
+            onClick={() => setShowSidebar((s) => !s)}
+            disabled={!file}
+            aria-pressed={showSidebar}
+          >
+            Info
+          </button>
+          <button type="button" className={styles.navTab} onClick={() => setShowAbout(true)}>
+            About
+          </button>
+        </nav>
+        <button type="button" className="primary" onClick={chooseFile}>
+          Open file
         </button>
       </header>
 
@@ -249,8 +263,6 @@ export default function App() {
               view={view}
               rows={rows}
               running={running}
-              theme={theme}
-              nullColor={nullColor}
               onSort={onSort}
               onLoaded={onLoaded}
               onViewError={onViewError}
@@ -272,12 +284,34 @@ export default function App() {
         </>
       ) : (
         <main className={styles.empty}>
-          <div>
-            <h1>Parquet Viewer</h1>
-            <p>Open a .parquet file or drop one here.</p>
-            <button type="button" className="primary" onClick={chooseFile}>
-              Open file…
-            </button>
+          <div className={styles.hero}>
+            <div className={styles.heroCopy}>
+              <h1>Query Parquet files with plain SQL.</h1>
+              <p>
+                Open a file or drop it anywhere in this window. Filter and sort with DuckDB, right on your
+                machine.
+              </p>
+              <button type="button" className="primary large" onClick={chooseFile}>
+                Open file
+              </button>
+            </div>
+            <figure className={styles.codeWindow}>
+              <div className={styles.codeChrome}>query</div>
+              <pre>
+                <code>
+                  <span className={styles.ln}>1</span>
+                  <span className={styles.kw}>SELECT</span> * <span className={styles.kw}>FROM</span> file
+                  {"\n"}
+                  <span className={styles.ln}>2</span>
+                  <span className={styles.kw}>WHERE</span> amount &gt; <span className={styles.num}>100</span>
+                  {"\n"}
+                  <span className={styles.ln}>3</span>
+                  <span className={styles.kw}>ORDER BY</span> created_at{" "}
+                  <span className={styles.kw}>DESC</span>
+                </code>
+              </pre>
+              <figcaption>Write the WHERE and ORDER BY part in the query bar.</figcaption>
+            </figure>
           </div>
         </main>
       )}

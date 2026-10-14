@@ -1,3 +1,5 @@
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "@glideapps/glide-data-grid/dist/index.css";
 import "./global.css";
 import React from "react";
