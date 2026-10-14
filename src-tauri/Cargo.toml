@@ -4,6 +4,7 @@ name = "parquet-viewer"
 version = "0.1.0"
 description = "Fast, read-only desktop viewer for Parquet files"
 authors = ["Fabian Eulitz"]
+license = "MIT"
 edition = "2024"
 publish = false
 

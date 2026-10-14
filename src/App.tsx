@@ -1,16 +1,18 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import logo from "../src-tauri/icons/128x128.png";
 import styles from "./App.module.css";
-import { AboutDialog } from "./components/AboutDialog";
 import { DataView } from "./components/DataView";
 import { QueryBar } from "./components/QueryBar";
 import { Sidebar } from "./components/Sidebar";
 import { api, AppError, EMPTY_VIEW, type Column, type OpenedFile, type View } from "./lib/api";
 import { cycleSort } from "./lib/clause";
 import { fileName, formatCount } from "./lib/format";
+
+// Loaded on demand: it bundles a few hundred KB of license notices.
+const AboutDialog = lazy(() => import("./components/AboutDialog").then((m) => ({ default: m.AboutDialog })));
 
 const MIN_SIDEBAR_WIDTH = 200;
 const MIN_GRID_WIDTH = 200;
@@ -319,7 +321,11 @@ export default function App() {
         </main>
       )}
 
-      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
+      {showAbout && (
+        <Suspense>
+          <AboutDialog onClose={() => setShowAbout(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
