@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
+  workflow_dispatch:
 
-# A newer push to the same branch or PR supersedes the running checks.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -27,7 +27,7 @@ jobs:
 
   backend:
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: [ubuntu-22.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
