@@ -1,0 +1,55 @@
+.gridWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.busy {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* Floating "go to first/last row" buttons, clear of both scrollbars. */
+.jumpButtons {
+  position: absolute;
+  right: 28px;
+  bottom: 32px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jumpButtons button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0.85;
+}
+
+.jumpButtons button:hover {
+  opacity: 1;
+}
+
+.jumpButtons svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

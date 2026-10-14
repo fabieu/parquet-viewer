@@ -26,9 +26,6 @@ export function cellFactory(columns: Column[], nullColor: string): ToCell {
 
   return (value, col) => {
     if (value === null) return nullCells[col];
-    if (typeof value === "boolean") {
-      return { kind: GridCellKind.Boolean, data: value, allowOverlay: false, readonly: true };
-    }
     const text = typeof value === "object" ? JSON.stringify(value) : String(value);
     return {
       kind: GridCellKind.Text,

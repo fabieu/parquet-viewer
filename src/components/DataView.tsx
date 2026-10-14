@@ -1,5 +1,6 @@
 import DataEditor, {
   type CellArray,
+  type CellClickedEventArgs,
   type DataEditorRef,
   type GridCell,
   type GridColumn,
@@ -10,16 +11,22 @@ import DataEditor, {
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, AppError, type CellValue, type Column, type FileId, type View } from "../lib/api";
 import { cellFactory, loadingCell } from "../lib/cells";
+import { ContextMenu } from "./ContextMenu";
+import styles from "./DataView.module.css";
 import { trailingSort } from "../lib/clause";
 import { PAGE_SIZE, Pager } from "../lib/pager";
 
 /** Largest selection copied in one go. */
 const MAX_COPY_ROWS = 10_000;
 const KEYBINDINGS = { copy: true, selectAll: true, search: false };
+/** Space below the last row, so the horizontal scrollbar does not cover it. */
+const BOTTOM_SPACE = 20;
 
 interface Props {
   fileId: FileId;
   columns: Column[];
+  /** Columns left out of the grid. Rows still carry every column. */
+  hiddenColumns: ReadonlySet<string>;
   view: View;
   /** Row count to show: the view's, or the previous one while it runs. */
   rows: number;
@@ -36,10 +43,11 @@ interface Props {
 }
 
 export const DataView = memo(function DataView(props: Props) {
-  const { fileId, columns, view, rows, running, theme, nullColor, onSort } = props;
+  const { fileId, columns, hiddenColumns, view, rows, running, theme, nullColor, onSort } = props;
   const gridRef = useRef<DataEditorRef>(null);
   const visible = useRef<Rectangle>({ x: 0, y: 0, width: 1, height: 50 });
   const [widths, setWidths] = useState<Record<string, number>>({});
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Keep callbacks current without recreating the pager.
   const callbacks = useRef(props);
@@ -82,21 +90,32 @@ export const DataView = memo(function DataView(props: Props) {
     [pager],
   );
 
-  const toCell = useMemo(() => cellFactory(columns, nullColor), [columns, nullColor]);
+  // Grid column index → index into `columns` and each row's values.
+  const shown = useMemo(
+    () => columns.flatMap((c, i) => (hiddenColumns.has(c.name) ? [] : [i])),
+    [columns, hiddenColumns],
+  );
+
+  // The cell at grid column `col` of a row; the one place grid indices are
+  // mapped back to file columns.
+  const cellAt = useMemo(() => {
+    const toCell = cellFactory(columns, nullColor);
+    return (values: CellValue[], col: number) => toCell(values[shown[col]], shown[col]);
+  }, [columns, shown, nullColor]);
 
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
       const values = pager.getRow(row);
-      return values ? toCell(values[col], col) : loadingCell;
+      return values ? cellAt(values, col) : loadingCell;
     },
-    [pager, toCell],
+    [pager, cellAt],
   );
 
   // Copy: use cached rows when possible, otherwise fetch the selection.
   const getCellsForSelection = useCallback(
     (rect: Rectangle) => {
       const rowCells = (values: CellValue[]) =>
-        Array.from({ length: rect.width }, (_, i) => toCell(values[rect.x + i], rect.x + i));
+        Array.from({ length: rect.width }, (_, i) => cellAt(values, rect.x + i));
       const fromCache: GridCell[][] = [];
       for (let row = rect.y; row < rect.y + rect.height; row++) {
         const values = pager.getRow(row);
@@ -118,32 +137,53 @@ export const DataView = memo(function DataView(props: Props) {
         return page.rows.map(rowCells);
       };
     },
-    [pager, toCell, fileId, view],
+    [pager, cellAt, fileId, view],
   );
 
   const sort = useMemo(() => trailingSort(view.clause), [view.clause]);
   const gridColumns = useMemo<GridColumn[]>(
     () =>
-      columns.map((c) => {
+      shown.map((i) => {
+        const c = columns[i];
         const arrow = sort?.column === c.name ? (sort.descending ? " ▼" : " ▲") : "";
         return { id: c.name, title: c.name + arrow, width: widths[c.name] ?? 160 };
       }),
-    [columns, sort, widths],
+    [columns, shown, sort, widths],
   );
 
   // Wide enough for the largest row number at full font size.
-  const markerWidth = 20 + 8 * String(rows).length;
+  const markerWidth = 12 + 8 * String(rows).length;
   const rowMarkers = useMemo(() => ({ kind: "number" as const, width: markerWidth }), [markerWidth]);
+  // Scroll only vertically; the column just has to exist.
+  const goToStart = () => gridRef.current?.scrollTo(0, 0, "vertical");
+  const goToEnd = () => gridRef.current?.scrollTo(0, rows - 1, "vertical", 0, BOTTOM_SPACE);
 
-  const onHeaderClicked = useCallback((col: number) => onSort(columns[col].name), [onSort, columns]);
+  // The grid itself selects the right-clicked cell if it is outside the
+  // selection, so the menu always acts on what is highlighted.
+  const onCellContextMenu = useCallback((_cell: Item, e: CellClickedEventArgs) => {
+    e.preventDefault();
+    setMenu({ x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY });
+  }, []);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  // Same as Ctrl+C. Errors (e.g. the copy limit) are reported by
+  // `getCellsForSelection` already.
+  const copySelection = () => {
+    gridRef.current?.emit("copy").catch(() => {});
+    gridRef.current?.focus();
+  };
+
+  const onHeaderClicked = useCallback(
+    (col: number) => onSort(gridColumns[col].id as string),
+    [onSort, gridColumns],
+  );
   const onColumnResize = useCallback(
     (column: GridColumn, size: number) => setWidths((w) => ({ ...w, [column.id as string]: size })),
     [],
   );
 
   return (
-    <div className="grid-wrap">
-      {running && <div className="grid-busy">Running query…</div>}
+    <div className={styles.gridWrap}>
+      {running && <div className={styles.busy}>Running query…</div>}
       <DataEditor
         ref={gridRef}
         columns={gridColumns}
@@ -152,8 +192,11 @@ export const DataView = memo(function DataView(props: Props) {
         getCellsForSelection={getCellsForSelection}
         onVisibleRegionChanged={onVisibleRegionChanged}
         onHeaderClicked={onHeaderClicked}
+        onCellContextMenu={onCellContextMenu}
         onColumnResize={onColumnResize}
         rowMarkers={rowMarkers}
+        rowSelect="none"
+        overscrollY={BOTTOM_SPACE}
         smoothScrollX
         smoothScrollY
         width="100%"
@@ -161,6 +204,28 @@ export const DataView = memo(function DataView(props: Props) {
         theme={theme}
         keybindings={KEYBINDINGS}
       />
+      {rows > 0 && shown.length > 0 && (
+        <div className={styles.jumpButtons}>
+          <button type="button" onClick={goToStart} title="Go to first row" aria-label="Go to first row">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
+          <button type="button" onClick={goToEnd} title="Go to last row" aria-label="Go to last row">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[{ label: "Copy", shortcut: "Ctrl+C", onSelect: copySelection }]}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   );
 });
