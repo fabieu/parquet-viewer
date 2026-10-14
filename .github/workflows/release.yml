@@ -90,11 +90,31 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
+      # Windows signing with Azure Artifact Signing. Unsigned builds are
+      # produced while AZURE_CLIENT_ID is not set.
+      - name: Check Windows signing
+        id: win-signing
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          if [ -n "$AZURE_CLIENT_ID" ]; then
+            echo "args=--config src-tauri/tauri.windows-signing.conf.json" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install artifact-signing-cli
+        if: steps.win-signing.outputs.args != ''
+        run: cargo install artifact-signing-cli --version 0.11.0 --locked
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          # macOS signing and notarization. Unsigned builds are produced
-          # while these secrets are not set.
+          # Windows signing, read by artifact-signing-cli.
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
+          # macOS signing and notarization.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -106,4 +126,4 @@ jobs:
           # tagName: with tagName, tauri-action v1 rewrites the release's
           # name and body, which would erase release-please's changelog.
           releaseId: ${{ needs.release-please.outputs.release_id }}
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ steps.win-signing.outputs.args }}
