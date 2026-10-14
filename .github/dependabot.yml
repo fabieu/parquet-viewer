@@ -13,16 +13,10 @@ updates:
     assignees:
       - "fabieu"
     groups:
-      major-updates:
-        update-types:
-          - "major"
       minor-updates:
         update-types:
           - "minor"
           - "patch"
-      other-updates:
-        patterns:
-          - "*"
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -36,16 +30,23 @@ updates:
     assignees:
       - "fabieu"
     groups:
-      major-updates:
-        update-types:
-          - "major"
+      # @glideapps/glide-data-grid and its peer dependencies. Major bumps of
+      # react, react-dom and marked must wait until a stable glide release
+      # supports them (6.0.3 requires react 16-18 and marked ^4).
+      glide-data-grid:
+        patterns:
+          - "@glideapps/glide-data-grid"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "marked"
+          - "lodash"
+          - "react-responsive-carousel"
       minor-updates:
         update-types:
           - "minor"
           - "patch"
-      other-updates:
-        patterns:
-          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
