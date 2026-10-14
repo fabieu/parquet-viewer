@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "windows": {
+      "signCommand": "artifact-signing-cli -e https://weu.codesigning.azure.net %1"
+    }
+  }
+}
