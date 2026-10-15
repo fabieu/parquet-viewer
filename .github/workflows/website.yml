@@ -1,0 +1,57 @@
+name: Website
+
+# Builds the landing page in packages/website on every change to it and
+# publishes it to GitHub Pages from main. Pull requests only build it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/website/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/website.yml"
+  pull_request:
+    paths:
+      - "packages/website/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/website.yml"
+  workflow_dispatch:
+
+# Never cancel a deployment in progress; a newer push queues behind it.
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Installs the pnpm version from packageManager in package.json.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @parquet-viewer/website
+      - run: pnpm --filter @parquet-viewer/website build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: packages/website/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        id: deployment

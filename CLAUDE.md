@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A read-only Tauri 2 desktop app for viewing Parquet files and filtering/sorting them with a user-typed SQL `WHERE … ORDER BY …` suffix. Rust backend (DuckDB, bundled) in `packages/tauri`, React 18 + TypeScript + Vite frontend in `packages/frontend`. pnpm workspace; only the frontend is a workspace package — the Rust crate is built by Cargo/Tauri.
+A read-only Tauri 2 desktop app for viewing Parquet files and filtering/sorting them with a user-typed SQL `WHERE … ORDER BY …` suffix. Rust backend (DuckDB, bundled) in `packages/tauri`, React 18 + TypeScript + Vite frontend in `packages/frontend`, and the project landing page (React 19 + Tailwind v4) in `packages/website`. pnpm workspace; the frontend and website are workspace packages — the Rust crate is built by Cargo/Tauri.
 
 ## Commands
 
@@ -30,6 +30,9 @@ cargo test sorts_and_filters                 # single test
 cargo insta review                           # accept changed snapshots (needs cargo-insta)
 
 pnpm licenses         # regenerate packages/frontend/THIRD_PARTY_LICENSES.json (needs cargo-about); run after dependency changes
+
+pnpm --filter @parquet-viewer/website dev     # landing page dev server (http://localhost:5173/parquet-viewer/)
+pnpm --filter @parquet-viewer/website build   # tsc + client build + SSR build + prerender into packages/website/dist
 ```
 
 - `tauri::generate_context!` requires `packages/frontend/dist` to exist, so `cargo` builds/tests fail on a fresh clone until you run `pnpm build` (or create the empty dir, as CI does).
@@ -61,6 +64,18 @@ pnpm licenses         # regenerate packages/frontend/THIRD_PARTY_LICENSES.json (
 - `lib/cells.ts` — value → glide-data-grid cell mapping and TSV copy text.
 - `components/DataView.tsx` hosts `@glideapps/glide-data-grid`; `App.tsx` owns file/view state.
 - Visual design follows `DESIGN.md` (black canvas, single yellow accent `#faff69`, Inter / JetBrains Mono); theme tokens live in `global.css` and `lib/theme.ts`.
+
+### Website (`packages/website`)
+
+- Single landing page deployed to GitHub Pages (`https://fabieu.github.io/parquet-viewer/`, set once as `VITE_SITE_URL` in `.env`; the Vite `base` is derived from it) by `.github/workflows/website.yml`; pull requests only build it.
+- Follows `DESIGN.md` Part 2; tokens are the Tailwind `@theme` in `src/index.css`.
+- Fully static: React and the icon components are used only to render HTML, never in the browser. The only shipped JavaScript is `src/client.ts` (~2 KB), which wires up the mobile menu, the query-example tabs and the back-to-top button by `id`/ARIA attributes — keep the markup in `Nav.tsx`, `QueryExamples.tsx` and `ScrollToTop.tsx` in step with it. Components must not use state, effects or event handlers.
+- Pages are listed in `PAGES` (`src/content.ts`): home, `imprint/` and `privacy/`, each with its own HTML shell (`index.html`, `imprint/index.html`, `privacy/index.html`, also listed in `vite.config.ts`); `<html data-page>` names the page.
+- `renderInto` (`src/entry-server.tsx`) fills a shell's `<!--app-->` and `<!--head-->` (font preload; JSON-LD on the home page). `scripts/prerender.mjs` runs it for the build; in dev, the `staticPagesInDev` plugin in `vite.config.ts` runs it per request and reloads the page when a component changes (no HMR), so dev and production serve the same HTML.
+- Impressum and Datenschutzerklärung are German HTML in `src/legal/*.html`, adapted from the faustball-ux project (same operator; the privacy text is from Datenschutz-Generator.de). Keep the privacy policy in step with the site: it states that the site sets no cookies, uses no analytics and embeds no third-party content, and names GitHub Pages as the host.
+- `src/content.ts` holds the copy shared by the page and the JSON-LD (FAQ, links). Keep the facts in sync with the README.
+- No third-party requests on page load (the privacy policy promises it): fonts are self-hosted via @fontsource, and the Buy Me a Coffee button is a plain link in their colors, not their embed script (which uses `document.write` and loads Google Fonts).
+- `public/screenshots/*.webp` are generated from `docs/*.png`; `public/og.png` is the 1200 × 630 social preview.
 
 ## Conventions
 

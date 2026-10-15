@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+/* Tokens from DESIGN.md Part 2. Dark only: near-black canvas, one electric-yellow accent, no shadows. */
+@theme {
+  --color-*: initial;
+  --color-canvas: #0a0a0a;
+  --color-surface-soft: #121212;
+  --color-surface-card: #1a1a1a;
+  --color-surface-elevated: #242424;
+  --color-hairline: #2a2a2a;
+  --color-hairline-strong: #3a3a3a;
+  --color-on-dark: #ffffff;
+  --color-body-strong: #e6e6e6;
+  --color-body: #cccccc;
+  --color-muted: #888888;
+  --color-muted-soft: #5a5a5a;
+  --color-primary: #faff69;
+  --color-primary-active: #e6eb52;
+  --color-on-primary: #0a0a0a;
+  --color-syntax-number: #7cb2ff;
+
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Menlo, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --text-display-xl: 72px;
+  --text-display-xl--line-height: 1.05;
+  --text-display-xl--letter-spacing: -2.5px;
+  --text-display-lg: 56px;
+  --text-display-lg--line-height: 1.1;
+  --text-display-lg--letter-spacing: -2px;
+  --text-display-md: 40px;
+  --text-display-md--line-height: 1.15;
+  --text-display-md--letter-spacing: -1.5px;
+  --text-display-sm: 32px;
+  --text-display-sm--line-height: 1.2;
+  --text-display-sm--letter-spacing: -1px;
+  --text-title-lg: 24px;
+  --text-title-lg--line-height: 1.3;
+  --text-title-lg--letter-spacing: -0.3px;
+  --text-title-md: 18px;
+  --text-title-md--line-height: 1.4;
+  --text-title-sm: 16px;
+  --text-title-sm--line-height: 1.4;
+  --text-stat: 56px;
+  --text-stat--line-height: 1;
+  --text-stat--letter-spacing: -1.5px;
+  --text-body-md: 16px;
+  --text-body-md--line-height: 1.55;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.55;
+  --text-caption: 13px;
+  --text-caption--line-height: 1.4;
+  --text-label: 12px;
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: 1.5px;
+  --text-code: 14px;
+  --text-code--line-height: 1.55;
+
+  --spacing-section: 96px;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    /* Keeps anchor targets clear of the sticky 64px nav. */
+    scroll-padding-top: 80px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-body-md text-body antialiased;
+  }
+
+  ::selection {
+    @apply bg-primary text-on-primary;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply text-balance text-on-dark;
+  }
+}
+
+/* The Impressum and Datenschutzerklärung, rendered from generated HTML (src/legal/*.html). */
+@layer components {
+  .legal-prose {
+    @apply text-body-md text-body;
+    overflow-wrap: anywhere;
+
+    & h2 {
+      @apply mt-12 border-t border-hairline pt-8 text-title-lg font-bold;
+    }
+    & h2:first-child {
+      @apply mt-0 border-0 pt-0;
+    }
+    & h3 {
+      @apply mt-6 text-title-sm font-semibold text-on-dark;
+    }
+    & p,
+    & ul {
+      @apply my-4;
+    }
+    & ul {
+      @apply list-disc pl-5;
+    }
+    & li {
+      @apply my-2;
+    }
+    & strong {
+      @apply font-semibold text-body-strong;
+    }
+    /* {component.text-link}: yellow, underlined. */
+    & a {
+      @apply text-primary underline underline-offset-2 hover:text-primary-active;
+    }
+    & ul.index {
+      @apply list-none pl-0;
+    }
+    & ul.index li {
+      @apply my-1;
+    }
+    & .seal {
+      @apply mt-12 text-caption text-muted;
+    }
+  }
+}
+
+/* Motion follows the app: a 12px rise and fade on the expo-out curve, never on reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  .rise {
+    animation: rise 0.6s var(--ease-out-expo) both;
+  }
+
+  /* Sections fade in as they enter the viewport; browsers without scroll timelines show them as is. */
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
