@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/fabieu/parquet-viewer/compare/v0.3.0...v0.4.0) (2026-10-15)
+
+
+### Features
+
+* size grid columns to fit their content ([7731961](https://github.com/fabieu/parquet-viewer/commit/7731961692d415c824c3fb4f1fcd79e0d2797782))
+
+
+### Bug Fixes
+
+* widen the About dialog to 720px ([b23deb9](https://github.com/fabieu/parquet-viewer/commit/b23deb993bdf105e035df0be5170ee947e3ef1a6))
+
 ## [0.3.0](https://github.com/fabieu/parquet-viewer/compare/v0.2.0...v0.3.0) (2026-10-15)
 
 
