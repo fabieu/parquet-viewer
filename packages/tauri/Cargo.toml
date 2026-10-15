@@ -40,3 +40,4 @@ strip = true
 # DuckDB is C++ and very slow unoptimized; optimize it even in dev builds.
 [profile.dev.package.libduckdb-sys]
 opt-level = 3
+debug = false

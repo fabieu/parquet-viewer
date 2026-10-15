@@ -2,12 +2,10 @@ name: CI
 
 on:
   pull_request:
-  # Runs on main only to refresh the Rust cache that pull requests restore:
-  # after a dependency change, and weekly for new stable Rust releases and
-  # before GitHub evicts unused caches.
-  push:
-    branches: [main]
-    paths: [packages/tauri/Cargo.lock]
+  # Pull requests can only restore caches saved on main, so main runs only to
+  # refresh the Rust cache: weekly for new stable Rust releases and before
+  # GitHub evicts unused caches, or by hand after a dependency change (pull
+  # requests still restore the older cache by prefix in the meantime).
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
