@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/fabieu/parquet-viewer/compare/v0.2.0...v0.3.0) (2026-10-15)
+
+
+### Features
+
+* export the current view to Parquet or CSV ([850302e](https://github.com/fabieu/parquet-viewer/commit/850302ea75225ff543866ed8f08109406255c03e))
+
+
+### Performance Improvements
+
+* fetch only the visible columns and batch neighbouring pages ([301b6a5](https://github.com/fabieu/parquet-viewer/commit/301b6a597ae47c3df15adb80a02c4b0b0c22b634))
+* store only row numbers for filtered and large sorted views ([b4553a0](https://github.com/fabieu/parquet-viewer/commit/b4553a0827ff43840a233ce07d41a95c8ac28c8e))
+
 ## [0.2.0](https://github.com/fabieu/parquet-viewer/compare/v0.1.0...v0.2.0) (2026-10-14)
 
 
