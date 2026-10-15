@@ -84,14 +84,14 @@ Exporting has no row limit. The open file is never overwritten: choosing it as t
 
 ## Building from source
 
-You need [Rust](https://rustup.rs/), [Node.js](https://nodejs.org/) LTS and the [platform prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system.
+You need [Rust](https://rustup.rs/), [Node.js](https://nodejs.org/) LTS, [pnpm](https://pnpm.io/installation) and the [platform prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system.
 
 ```sh
 git clone https://github.com/fabieu/parquet-viewer.git
 cd parquet-viewer
-npm install
-npm run tauri dev     # run in development mode
-npm run tauri build   # build installers for your platform
+pnpm install
+pnpm tauri dev     # run in development mode
+pnpm tauri build   # build installers for your platform
 ```
 
 > [!NOTE]
@@ -100,6 +100,6 @@ npm run tauri build   # build installers for your platform
 To run the checks:
 
 ```sh
-npm run lint && npm run format:check && npm test
+pnpm lint && pnpm format:check && pnpm test
 cd packages/tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```

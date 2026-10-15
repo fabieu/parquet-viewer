@@ -25,16 +25,24 @@ for (const license of about.licenses) {
   for (const { crate } of license.used_by) add(license.id, license.text, crate.name, crate.version);
 }
 
-const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
-for (const [path, meta] of Object.entries(lock.packages)) {
-  // Skip the workspace root, the workspace packages and their links.
-  if (!path.includes("node_modules/") || meta.link || meta.dev) continue;
-  // Prefer the MIT text of dual-licensed packages; .spdx files are metadata.
-  const files = readdirSync(path)
-    .filter((f) => /^(licen[sc]e|copying)(-mit)?(\.(md|txt))?$/i.test(f))
-    .sort((a, b) => /mit/i.test(b) - /mit/i.test(a));
-  const text = files.length ? readFileSync(join(path, files[0]), "utf8") : "";
-  add(meta.license ?? "UNKNOWN", text, path.replace(/^.*node_modules\//, ""), meta.version);
+// Production dependencies of the frontend, keyed by license. The paths line up
+// with the versions of each package.
+const pnpm = execFileSync(
+  "pnpm",
+  ["--filter", "@parquet-viewer/frontend", "licenses", "list", "--json", "--prod"],
+  { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+);
+for (const packages of Object.values(JSON.parse(pnpm))) {
+  for (const { name, versions, paths, license } of packages) {
+    versions.forEach((version, i) => {
+      // Prefer the MIT text of dual-licensed packages; .spdx files are metadata.
+      const files = readdirSync(paths[i])
+        .filter((f) => /^(licen[sc]e|copying)(-mit)?(\.(md|txt))?$/i.test(f))
+        .sort((a, b) => /mit/i.test(b) - /mit/i.test(a));
+      const text = files.length ? readFileSync(join(paths[i], files[0]), "utf8") : "";
+      add(license, text, name, version);
+    });
+  }
 }
 
 const licenses = [...groups.values()];

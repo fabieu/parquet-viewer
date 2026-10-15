@@ -1,5 +1,5 @@
 dist
 packages/tauri
-package-lock.json
+pnpm-lock.yaml
 *.md
 THIRD_PARTY_LICENSES.json
