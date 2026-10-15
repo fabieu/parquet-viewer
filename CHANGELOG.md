@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/fabieu/parquet-viewer/compare/v0.3.0...v0.4.0) (2026-10-15)
+
+
+### Features
+
+* add a project website for GitHub Pages ([ea842f5](https://github.com/fabieu/parquet-viewer/commit/ea842f5e761b22c00902aa486aeb789c0f28bc7e))
+
 ## [0.3.0](https://github.com/fabieu/parquet-viewer/compare/v0.2.0...v0.3.0) (2026-10-15)
 
 
