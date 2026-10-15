@@ -6,6 +6,11 @@ const NUMERIC =
 
 export const loadingCell: GridCell = { kind: GridCellKind.Loading, allowOverlay: false };
 
+/** The text a cell shows. */
+export function cellText(cell: GridCell): string {
+  return cell.kind === GridCellKind.Text ? cell.displayData : "";
+}
+
 /**
  * Tab-separated text of `rows`, as the grid copies text cells: the shown
  * text, quoted if it contains a tab, newline or quote.
@@ -15,7 +20,7 @@ export function copyText(rows: GridCell[][]): string {
     .map((row) =>
       row
         .map((cell) => {
-          const text = cell.kind === GridCellKind.Text ? cell.displayData : "";
+          const text = cellText(cell);
           return /[\t\n"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
         })
         .join("\t"),

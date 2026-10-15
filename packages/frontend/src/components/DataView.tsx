@@ -9,12 +9,13 @@ import DataEditor, {
 } from "@glideapps/glide-data-grid";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, AppError, type Column, type FileId, type View } from "../lib/api";
-import { cellFactory, copyText, loadingCell } from "../lib/cells";
+import { cellFactory, cellText, copyText, loadingCell, type ToCell } from "../lib/cells";
 import { ContextMenu } from "./ContextMenu";
 import styles from "./DataView.module.css";
 import { trailingSort } from "../lib/clause";
 import { PAGE_SIZE, Pager, type ColumnWindow } from "../lib/pager";
 import { GRID_THEME, NULL_COLOR } from "../lib/theme";
+import { canvasMeasure, fitWidth, MAX_WIDTH, MIN_WIDTH } from "../lib/widths";
 
 /** Largest selection copied in one go. */
 const MAX_COPY_ROWS = 10_000;
@@ -63,6 +64,7 @@ export const DataView = memo(function DataView(props: Props) {
   useLayoutEffect(() => {
     callbacks.current = props;
   });
+  const autoSize = useRef((_page: number) => {});
 
   const pager = useMemo(() => {
     let loadedOnce = false;
@@ -73,6 +75,8 @@ export const DataView = memo(function DataView(props: Props) {
         if (!loadedOnce) callbacks.current.onLoaded(view, total);
         loadedOnce = true;
         redrawPage(gridRef.current, visible.current, page, PAGE_SIZE);
+        // Measure in the grid's font, not a fallback still in its place.
+        void document.fonts.ready.then(() => autoSize.current(page));
       },
       onError: (e) => {
         if (loadedOnce) callbacks.current.onError(e);
@@ -82,6 +86,22 @@ export const DataView = memo(function DataView(props: Props) {
   }, [fileId, view]);
 
   const toCell = useMemo(() => cellFactory(columns, NULL_COLOR), [columns]);
+
+  // Each column is sized once per file, to its header and the first page of
+  // values it loads with; a width set by hand is kept.
+  const measure = useMemo(canvasMeasure, []);
+  useLayoutEffect(() => {
+    autoSize.current = (page) => {
+      const first = page * PAGE_SIZE;
+      const fitted: Record<string, number> = {};
+      for (const c of shown) {
+        const { name } = columns[c];
+        if (name in widths || pager.getCell(first, c) === undefined) continue;
+        fitted[name] = fitWidth(name, pageTexts(pager, toCell, c, first), measure);
+      }
+      if (Object.keys(fitted).length > 0) setWidths((w) => ({ ...fitted, ...w }));
+    };
+  });
 
   // Reports the visible region to the pager, as file rows and columns.
   const report = useCallback(() => {
@@ -210,6 +230,8 @@ export const DataView = memo(function DataView(props: Props) {
         onHeaderClicked={onHeaderClicked}
         onCellContextMenu={onCellContextMenu}
         onColumnResize={onColumnResize}
+        minColumnWidth={MIN_WIDTH}
+        maxColumnWidth={MAX_WIDTH}
         rowMarkers={rowMarkers}
         rowSelect="none"
         overscrollY={BOTTOM_SPACE}
@@ -253,6 +275,15 @@ function columnWindow(shown: readonly number[], range: Rectangle): ColumnWindow 
     visible: shown.slice(range.x, end),
     fetch: shown.slice(Math.max(0, range.x - COLUMN_MARGIN), end + COLUMN_MARGIN),
   };
+}
+
+/** The shown text of file column `column` in the cached page starting at row `first`. */
+function* pageTexts(pager: Pager, toCell: ToCell, column: number, first: number) {
+  for (let row = first; row < first + PAGE_SIZE; row++) {
+    const value = pager.getCell(row, column);
+    if (value === undefined) return;
+    yield cellText(toCell(value, column));
+  }
 }
 
 /** Redraws the visible cells that belong to a newly loaded page. */
