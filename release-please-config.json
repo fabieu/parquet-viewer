@@ -5,6 +5,7 @@
       "release-type": "node",
       "package-name": "parquet-viewer",
       "include-component-in-tag": false,
+      "exclude-paths": ["packages/website"],
       "extra-files": [
         {
           "type": "toml",
