@@ -2,7 +2,7 @@
 
 <img src="packages/tauri/icons/128x128.png" alt="" width="96" height="96">
 
-# Parquet Viewer
+# [Parquet Viewer](https://fabieu.github.io/parquet-viewer/)
 
 [![CI](https://github.com/fabieu/parquet-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/fabieu/parquet-viewer/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fabieu/parquet-viewer)](https://github.com/fabieu/parquet-viewer/releases)
@@ -10,7 +10,7 @@
 
 A fast, read-only desktop app for opening Parquet files and exploring them with plain SQL.
 
-[Features](#features) • [Installation](#installation) • [Usage](#usage) • [Building from source](#building-from-source)
+[Website](https://fabieu.github.io/parquet-viewer/) • [Features](#features) • [Installation](#installation) • [Usage](#usage) • [Building from source](#building-from-source)
 
 ![Parquet Viewer showing a file with its schema, column statistics and data grid](docs/file-view.png)
 
@@ -102,4 +102,11 @@ To run the checks:
 ```sh
 pnpm lint && pnpm format:check && pnpm test
 cd packages/tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+```
+
+The [project website](https://fabieu.github.io/parquet-viewer/) lives in `packages/website`:
+
+```sh
+pnpm --filter @parquet-viewer/website dev     # dev server at http://localhost:5173/parquet-viewer/
+pnpm --filter @parquet-viewer/website build   # static build into packages/website/dist
 ```
