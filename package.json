@@ -13,7 +13,7 @@
     "lint": "pnpm --filter @parquet-viewer/frontend lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "licenses": "node scripts/licenses.mjs"
+    "licenses": "pnpm --filter @parquet-viewer/frontend run licenses"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

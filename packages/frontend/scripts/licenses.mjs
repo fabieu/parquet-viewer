@@ -1,5 +1,5 @@
-// Regenerates packages/frontend/THIRD_PARTY_LICENSES.json, the notices shown in the About dialog,
-// from the Rust crates (cargo-about, see packages/tauri/about.toml) and the npm
+// Regenerates THIRD_PARTY_LICENSES.json, the notices shown in the About dialog,
+// from the Rust crates (cargo-about, see ../tauri/about.toml) and the npm
 // packages that ship in the app. Run after dependency updates and commit.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -17,7 +17,7 @@ function add(id, text, name, version) {
 // cargo-about refuses to write to a pipe on Windows, so go through a file.
 const aboutJson = join(mkdtempSync(join(tmpdir(), "licenses-")), "about.json");
 execFileSync("cargo", ["about", "generate", "--format", "json", "-o", aboutJson], {
-  cwd: "packages/tauri",
+  cwd: "../tauri",
   stdio: "inherit",
 });
 const about = JSON.parse(readFileSync(aboutJson, "utf8"));
@@ -48,5 +48,5 @@ for (const packages of Object.values(JSON.parse(pnpm))) {
 const licenses = [...groups.values()];
 for (const g of licenses) g.packages.sort((a, b) => a.name.localeCompare(b.name));
 licenses.sort((a, b) => a.packages[0].name.localeCompare(b.packages[0].name));
-writeFileSync("packages/frontend/THIRD_PARTY_LICENSES.json", JSON.stringify(licenses, null, 2) + "\n");
+writeFileSync("THIRD_PARTY_LICENSES.json", JSON.stringify(licenses, null, 2) + "\n");
 console.log(`${licenses.length} notices for ${licenses.reduce((n, g) => n + g.packages.length, 0)} packages`);

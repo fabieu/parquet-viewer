@@ -1,4 +1,4 @@
-# cargo-about config for THIRD_PARTY_LICENSES.json (see scripts/licenses.mjs).
+# cargo-about config for THIRD_PARTY_LICENSES.json (see packages/frontend/scripts/licenses.mjs).
 # Only crates that ship in the installers: the release targets, no dev or
 # build dependencies.
 targets = [

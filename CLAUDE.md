@@ -29,7 +29,7 @@ cargo test
 cargo test sorts_and_filters                 # single test
 cargo insta review                           # accept changed snapshots (needs cargo-insta)
 
-pnpm licenses         # regenerate packages/frontend/THIRD_PARTY_LICENSES.json (needs cargo-about); run after dependency changes
+pnpm run licenses     # regenerate packages/frontend/THIRD_PARTY_LICENSES.json (needs cargo-about); run after dependency changes
 
 pnpm --filter @parquet-viewer/website dev     # landing page dev server (http://localhost:5173/parquet-viewer/)
 pnpm --filter @parquet-viewer/website build   # tsc + client build + SSR build + prerender into packages/website/dist

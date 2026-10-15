@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "licenses": "node scripts/licenses.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
