@@ -10,9 +10,9 @@ import DataEditor, {
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, AppError, type Column, type FileId, type View } from "../lib/api";
 import { cellFactory, cellText, copyText, loadingCell, type ToCell } from "../lib/cells";
-import { ContextMenu } from "./ContextMenu";
+import { ContextMenu, type MenuItem } from "./ContextMenu";
 import styles from "./DataView.module.css";
-import { trailingSort } from "../lib/clause";
+import { cellFilters, trailingSort } from "../lib/clause";
 import { PAGE_SIZE, Pager, type ColumnWindow } from "../lib/pager";
 import { GRID_THEME, NULL_COLOR } from "../lib/theme";
 import { canvasMeasure, fitWidth, MAX_WIDTH, MIN_WIDTH } from "../lib/widths";
@@ -38,6 +38,8 @@ interface Props {
   /** The view's first page has not arrived yet. */
   running: boolean;
   onSort: (column: string) => void;
+  /** Adds `condition` to the query's WHERE part. */
+  onFilter: (condition: string) => void;
   /** `view` answered with its first page; `rows` is its row count. */
   onLoaded: (view: View, rows: number) => void;
   /** `view` failed before any page loaded, e.g. invalid SQL. */
@@ -46,7 +48,7 @@ interface Props {
 }
 
 export const DataView = memo(function DataView(props: Props) {
-  const { fileId, columns, shown, view, rows, running, onSort } = props;
+  const { fileId, columns, shown, view, rows, running, onSort, onFilter } = props;
   const gridRef = useRef<DataEditorRef>(null);
   // Until the grid reports its region, assume a full window of columns, so
   // the first fetch already covers them.
@@ -57,7 +59,7 @@ export const DataView = memo(function DataView(props: Props) {
     height: 50,
   });
   const [widths, setWidths] = useState<Record<string, number>>({});
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; cell: Item } | null>(null);
 
   // Keep callbacks current without recreating the pager.
   const callbacks = useRef(props);
@@ -196,9 +198,9 @@ export const DataView = memo(function DataView(props: Props) {
 
   // The grid itself selects the right-clicked cell if it is outside the
   // selection, so the menu always acts on what is highlighted.
-  const onCellContextMenu = useCallback((_cell: Item, e: CellClickedEventArgs) => {
+  const onCellContextMenu = useCallback((cell: Item, e: CellClickedEventArgs) => {
     e.preventDefault();
-    setMenu({ x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY });
+    setMenu({ x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY, cell });
   }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
   // Same as Ctrl+C. Errors (e.g. the copy limit) are reported by
@@ -206,6 +208,19 @@ export const DataView = memo(function DataView(props: Props) {
   const copySelection = () => {
     gridRef.current?.emit("copy").catch(() => {});
     gridRef.current?.focus();
+  };
+  // Filters on the right-clicked cell, once its value has loaded.
+  const menuItems = ([col, row]: Item): MenuItem[] => {
+    const value = pager.getCell(row, shown[col]);
+    const filters = value === undefined ? [] : cellFilters(columns[shown[col]], value);
+    return [
+      { label: "Copy", shortcut: "Ctrl+C", onSelect: copySelection },
+      ...filters.map((f, i) => ({
+        label: f.label,
+        separator: i === 0,
+        onSelect: () => onFilter(f.condition),
+      })),
+    ];
   };
 
   const onHeaderClicked = useCallback(
@@ -256,14 +271,7 @@ export const DataView = memo(function DataView(props: Props) {
           </button>
         </div>
       )}
-      {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={[{ label: "Copy", shortcut: "Ctrl+C", onSelect: copySelection }]}
-          onClose={closeMenu}
-        />
-      )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.cell)} onClose={closeMenu} />}
     </div>
   );
 });

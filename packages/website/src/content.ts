@@ -49,7 +49,7 @@ export const QUERY_EXAMPLES = [
     id: "filter",
     label: "Filter",
     clause: "WHERE payment_type = 'Cash' AND tip_amount > 0",
-    note: "Keep only the rows that match. Combine conditions with AND, OR and parentheses.",
+    note: "Keep only the rows that match. Combine conditions with AND, OR and parentheses. Right-clicking a cell writes a condition for you.",
   },
   {
     id: "sort",

@@ -67,7 +67,7 @@ ORDER BY fare_amount DESC
 
 ![A filtered and sorted view of a Parquet file](docs/query.png)
 
-Clicking a column header rewrites the `ORDER BY` part of the query for you. Click **Clear** to go back to the full file.
+Clicking a column header rewrites the `ORDER BY` part of the query for you. Right-click a cell to filter by its value: **Filter =** keeps the rows with that value, **Filter !=** removes them, and for numbers and dates **Filter ≥** and **Filter ≤** keep a range. On a `NULL` cell, the menu offers `IS NULL` and `IS NOT NULL` instead. Each choice adds a condition to the `WHERE` part. Click **Clear** to go back to the full file.
 
 > [!TIP]
 > The first query on a large file takes a few seconds while the result is prepared. After that, scrolling through the result is as fast as through the unfiltered file.

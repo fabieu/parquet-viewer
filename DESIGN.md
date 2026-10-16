@@ -195,7 +195,8 @@ license badge (`--border-strong` ring, muted), and expands to the license text i
 right-aligned large primary button.
 
 **`context-menu`** — fixed, min-width 160px, `--surface`, hairline, `--radius`, 4px padding. Items are borderless
-full-width rows (6px radius) with the label left and a muted 12px shortcut right; keyboard focus → `--bg-hover`.
+full-width rows (6px radius) with the label left and a muted 12px shortcut right; keyboard focus → `--bg-hover`. A
+hairline separates groups of items.
 
 ### Empty state
 

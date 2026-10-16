@@ -1,7 +1,7 @@
 import { GridCellKind, type GridCell } from "@glideapps/glide-data-grid";
 import type { CellValue, Column } from "./api";
 
-const NUMERIC =
+export const NUMERIC =
   /^(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|UTINYINT|USMALLINT|UINTEGER|UBIGINT|UHUGEINT|FLOAT|DOUBLE|DECIMAL)/;
 
 export const loadingCell: GridCell = { kind: GridCellKind.Loading, allowOverlay: false };

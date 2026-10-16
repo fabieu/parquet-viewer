@@ -5,6 +5,8 @@ export interface MenuItem {
   label: string;
   /** Shown right-aligned as a hint, e.g. `Ctrl+C`. */
   shortcut?: string;
+  /** Draws a line above the item, to start a group. */
+  separator?: boolean;
   onSelect: () => void;
 }
 
@@ -57,6 +59,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           key={item.label}
           type="button"
           role="menuitem"
+          className={item.separator ? styles.separator : undefined}
           onClick={() => {
             onClose();
             item.onSelect();

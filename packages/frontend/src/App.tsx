@@ -8,7 +8,7 @@ import { DataView } from "./components/DataView";
 import { QueryBar } from "./components/QueryBar";
 import { Sidebar } from "./components/Sidebar";
 import { api, AppError, EMPTY_VIEW, type Column, type OpenedFile, type View } from "./lib/api";
-import { cycleSort } from "./lib/clause";
+import { addFilter, cycleSort } from "./lib/clause";
 import { fileName, formatCount } from "./lib/format";
 
 // Loaded on demand: it bundles a few hundred KB of license notices.
@@ -128,14 +128,21 @@ export default function App() {
     setView((v) => (v.clause === trimmed ? v : { clause: trimmed }));
   }, []);
 
-  // Header click rewrites the query's ORDER BY: ascending → descending → off.
-  const onSort = useCallback(
-    (column: string) => {
-      const next = cycleSort(draftRef.current, column);
+  // Puts `rewrite` of the query text in the query bar and runs it.
+  const rewriteClause = useCallback(
+    (rewrite: (clause: string) => string) => {
+      const next = rewrite(draftRef.current);
       setDraft(next);
       applyClause(next);
     },
     [applyClause],
+  );
+  // Header click rewrites the query's ORDER BY: ascending → descending → off.
+  const onSort = useCallback((column: string) => rewriteClause((c) => cycleSort(c, column)), [rewriteClause]);
+  // A cell context-menu filter adds its condition to the query's WHERE part.
+  const onFilter = useCallback(
+    (condition: string) => rewriteClause((c) => addFilter(c, condition)),
+    [rewriteClause],
   );
 
   // Dragging the handle right of the sidebar resizes it, keeping some room
@@ -317,6 +324,7 @@ export default function App() {
               rows={rows}
               running={running}
               onSort={onSort}
+              onFilter={onFilter}
               onLoaded={onLoaded}
               onViewError={onViewError}
               onError={reportError}
