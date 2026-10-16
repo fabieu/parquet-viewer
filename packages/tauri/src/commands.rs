@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::db::Db;
-use crate::model::{AppResult, Column, ColumnStats, FileId, OpenedFile, Page, View};
+use crate::model::{AppResult, Column, ColumnProfile, FileId, FooterStats, OpenedFile, Page, View};
 
 /// A file passed on the command line or through the OS "open with" event,
 /// waiting for the UI to pick it up.
@@ -35,12 +35,23 @@ pub async fn get_rows(
 }
 
 #[tauri::command]
-pub async fn get_column_stats(
+pub async fn get_footer_stats(
     db: State<'_, Db>,
     file_id: FileId,
     column: String,
-) -> AppResult<ColumnStats> {
-    db.run(move |e| e.column_stats(file_id, &column)).await
+) -> AppResult<Option<FooterStats>> {
+    db.run(move |e| e.footer_stats(file_id, &column)).await
+}
+
+#[tauri::command]
+pub async fn get_column_profile(
+    db: State<'_, Db>,
+    file_id: FileId,
+    column: String,
+    view: View,
+) -> AppResult<ColumnProfile> {
+    db.run(move |e| e.column_profile(file_id, &column, &view))
+        .await
 }
 
 #[tauri::command]

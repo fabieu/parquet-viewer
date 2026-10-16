@@ -255,15 +255,118 @@ fn handles_quotes_in_paths_and_names() {
 }
 
 #[test]
-fn computes_column_stats() {
+fn reads_footer_stats() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture(
+        dir.path(),
+        "footer.parquet",
+        "SELECT i AS id, CASE WHEN i % 10 <> 0 THEN 'row ' || i END AS label, [i] AS list          FROM range(5000) t(i)",
+    );
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let stats = e.footer_stats(id, "id").unwrap().unwrap();
+    assert_eq!(stats.min.as_deref(), Some("0"));
+    // Compared as numbers across row groups, not as text.
+    assert_eq!(stats.max.as_deref(), Some("4999"));
+    assert_eq!(stats.null_count, Some(0));
+    let stats = e.footer_stats(id, "label").unwrap().unwrap();
+    assert_eq!(stats.min.as_deref(), Some("row 1"));
+    assert_eq!(stats.max.as_deref(), Some("row 999"));
+    assert_eq!(stats.null_count, Some(500));
+    assert!(e.footer_stats(id, "list").unwrap().is_none());
+    assert!(matches!(
+        e.footer_stats(id, "nope"),
+        Err(AppError::UnknownColumn(_))
+    ));
+}
+
+#[test]
+fn profiles_a_column() {
     let dir = tempfile::tempdir().unwrap();
     let path = numbers(dir.path());
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
-    let stats = e.column_stats(id, "bucket").unwrap();
-    assert_eq!(stats.min.as_deref(), Some("0"));
-    assert_eq!(stats.max.as_deref(), Some("6"));
-    assert_eq!(stats.null_count, 0);
+    let p = e.column_profile(id, "bucket", &View::default()).unwrap();
+    assert_eq!((p.rows, p.null_count, p.distinct_count), (5000, 0, 7));
+    assert_eq!(p.min.as_deref(), Some("0"));
+    assert_eq!(p.max.as_deref(), Some("6"));
+    assert!((p.mean.unwrap() - 2.999).abs() < 1e-9);
+    assert!(p.std_dev.unwrap() > 0.0);
+    let top: Vec<_> = p
+        .top_values
+        .iter()
+        .map(|v| (v.value.as_str(), v.count))
+        .collect();
+    assert_eq!(
+        top,
+        [("0", 715), ("1", 715), ("2", 714), ("3", 714), ("4", 714)]
+    );
+    // Integers get one bin per value while there are few values.
+    let bins: Vec<_> = p
+        .histogram
+        .iter()
+        .map(|b| (b.lower, b.upper, b.count))
+        .collect();
+    assert_eq!(bins[0], (0.0, 1.0, 715));
+    assert_eq!(bins[6], (6.0, 7.0, 714));
+    assert_eq!(bins.len(), 7);
+
+    let p = e.column_profile(id, "id", &View::default()).unwrap();
+    assert_eq!(p.histogram.len(), 20);
+    assert!(p.histogram.iter().all(|b| b.count == 250));
+
+    let p = e.column_profile(id, "label", &View::default()).unwrap();
+    assert_eq!(p.distinct_count, 5000);
+    assert!(p.mean.is_none() && p.histogram.is_empty());
+}
+
+#[test]
+fn profiles_the_current_view() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    // A filter keeps row numbers, a sort copies all columns.
+    for clause in [
+        "WHERE id < 10 AND bucket <> 3",
+        "WHERE id < 10 ORDER BY id DESC",
+    ] {
+        let p = e.column_profile(id, "id", &view(clause)).unwrap();
+        assert_eq!(p.min.as_deref(), Some("0"), "{clause}");
+        assert_eq!(p.max.as_deref(), Some("9"), "{clause}");
+        assert_eq!(p.histogram.iter().map(|b| b.count).sum::<u64>(), p.rows);
+    }
+    let p = e
+        .column_profile(id, "id", &view("WHERE id < 10 AND bucket <> 3"))
+        .unwrap();
+    assert_eq!((p.rows, p.distinct_count), (9, 9));
+    let p = e.column_profile(id, "id", &view("WHERE false")).unwrap();
+    assert_eq!((p.rows, p.distinct_count), (0, 0));
+    assert!(p.min.is_none() && p.mean.is_none() && p.histogram.is_empty());
+    assert!(matches!(
+        e.column_profile(id, "id", &view("WHERE nope")),
+        Err(AppError::QueryFailed(_))
+    ));
+}
+
+#[test]
+fn profiles_every_type() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture(dir.path(), "types.parquet", ALL_TYPES);
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let profiles: serde_json::Map<String, Json> = e
+        .schema(id)
+        .unwrap()
+        .iter()
+        .map(|c| {
+            let footer = e.footer_stats(id, &c.name).unwrap();
+            let profile = e.column_profile(id, &c.name, &View::default()).unwrap();
+            let value = serde_json::json!({ "footer": footer, "profile": profile });
+            (c.name.clone(), value)
+        })
+        .collect();
+    insta::assert_json_snapshot!("all_types_profiles", profiles);
 }
 
 #[test]

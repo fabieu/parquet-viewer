@@ -47,12 +47,48 @@ pub struct Page {
     pub total_rows: u64,
 }
 
+/// A column's statistics from the Parquet footer, combined over all row
+/// groups. A value is `None` if any row group lacks it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ColumnStats {
+pub struct FooterStats {
     pub min: Option<String>,
     pub max: Option<String>,
+    pub null_count: Option<u64>,
+}
+
+/// A column's statistics over the rows of a view, from a scan.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnProfile {
+    pub rows: u64,
     pub null_count: u64,
+    pub distinct_count: u64,
+    pub min: Option<String>,
+    pub max: Option<String>,
+    /// Numeric columns only.
+    pub mean: Option<f64>,
+    pub std_dev: Option<f64>,
+    /// The most frequent non-null values, most frequent first.
+    pub top_values: Vec<ValueCount>,
+    /// Equal-width bins from min to max; numeric columns only.
+    pub histogram: Vec<Bin>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValueCount {
+    pub value: String,
+    pub count: u64,
+}
+
+/// Values in `lower..upper`; the last bin also holds `upper`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bin {
+    pub lower: f64,
+    pub upper: f64,
+    pub count: u64,
 }
 
 #[derive(Debug, thiserror::Error, Serialize)]

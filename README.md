@@ -25,7 +25,7 @@ Parquet Viewer opens Parquet files of any size in an instant and lets you scroll
 - **Smooth scrolling through huge files:** the grid loads pages on demand and stays responsive at any depth, even in files with 100M+ rows.
 - **Filter and sort with SQL:** type a `WHERE … ORDER BY …` clause and run it. Invalid queries show the exact error and keep the previous result on screen.
 - **Sort by clicking headers:** each click cycles a column through ascending, descending and unsorted.
-- **Column statistics on demand:** min, max and null count for any column.
+- **Column profiles:** min, max and null count from the file footer instantly; on demand, distinct count, most frequent values, mean, standard deviation and a histogram over the current filter.
 - **Choose which columns to show:** hide and show columns from the schema list.
 - **Copy cells and rows:** select a range and copy it to the clipboard.
 - **Export the current view:** save the filtered and sorted rows, with the columns you are showing, as Parquet or CSV.
@@ -52,7 +52,7 @@ Click **Open file**, drop a file anywhere in the window, or pass the file's path
 
 ### Exploring the file
 
-The **Info** sidebar shows the file's metadata and schema. Select a column to see its Parquet type and compute its statistics, and use the checkboxes to hide or show columns in the grid. Drag the sidebar's edge to resize it, or click **Info** to hide it.
+The **Info** sidebar shows the file's metadata and schema. Select a column to see its Parquet type and footer statistics, or click **Load more** to scan it in the current view, and use the checkboxes to hide or show columns in the grid. Drag the sidebar's edge to resize it, or click **Info** to hide it.
 
 The status bar at the bottom shows how many rows and columns are currently visible.
 

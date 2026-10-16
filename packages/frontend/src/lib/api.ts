@@ -39,10 +39,39 @@ export interface Page {
   totalRows: number;
 }
 
-export interface ColumnStats {
+/** From the Parquet footer; a value is null if a row group lacks it. */
+export interface FooterStats {
   min: string | null;
   max: string | null;
+  nullCount: number | null;
+}
+
+/** A column's statistics over the rows of a view. */
+export interface ColumnProfile {
+  rows: number;
   nullCount: number;
+  distinctCount: number;
+  min: string | null;
+  max: string | null;
+  /** Numeric columns only. */
+  mean: number | null;
+  stdDev: number | null;
+  /** The most frequent non-null values, most frequent first. */
+  topValues: ValueCount[];
+  /** Equal-width bins from min to max; numeric columns only. */
+  histogram: Bin[];
+}
+
+export interface ValueCount {
+  value: string;
+  count: number;
+}
+
+/** Values in `lower..upper`; the last bin also holds `upper`. */
+export interface Bin {
+  lower: number;
+  upper: number;
+  count: number;
 }
 
 export type ErrorKind =
@@ -98,8 +127,12 @@ export const api = {
     columns: readonly number[],
     seq?: number,
   ) => call<Page>("get_rows", { fileId, offset, limit, view, columns, seq: seq ?? null }),
-  getColumnStats: (fileId: FileId, column: string) =>
-    call<ColumnStats>("get_column_stats", { fileId, column }),
+  /** `null` for nested columns. */
+  getFooterStats: (fileId: FileId, column: string) =>
+    call<FooterStats | null>("get_footer_stats", { fileId, column }),
+  /** Scans the column over the rows of `view`. */
+  getColumnProfile: (fileId: FileId, column: string, view: View) =>
+    call<ColumnProfile>("get_column_profile", { fileId, column, view }),
   /**
    * Writes `view` with the values of `columns` (schema indices) to `path`,
    * as Parquet or CSV by its extension.

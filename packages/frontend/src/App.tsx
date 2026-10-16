@@ -304,6 +304,8 @@ export default function App() {
               info={file.info}
               columns={file.columns}
               hiddenColumns={hiddenColumns}
+              view={view}
+              running={running}
               onToggleColumn={toggleColumn}
               onError={reportError}
             />

@@ -1,0 +1,560 @@
+---
+source: src/db/tests.rs
+expression: profiles
+---
+{
+  "bigint_col": {
+    "footer": {
+      "max": "42",
+      "min": "42",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 42.0,
+          "upper": 42.0
+        }
+      ],
+      "max": "42",
+      "mean": 42.0,
+      "min": "42",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "42"
+        }
+      ]
+    }
+  },
+  "bigint_unsafe": {
+    "footer": {
+      "max": "9007199254740993",
+      "min": "9007199254740993",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 9007199254740992.0,
+          "upper": 9007199254740992.0
+        }
+      ],
+      "max": "9007199254740993",
+      "mean": 9007199254740992.0,
+      "min": "9007199254740993",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "9007199254740993"
+        }
+      ]
+    }
+  },
+  "blob_col": {
+    "footer": {
+      "max": "\\x00\\xFF",
+      "min": "\\x00\\xFF",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "\\x00\\xFF",
+      "mean": null,
+      "min": "\\x00\\xFF",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "\\x00\\xFF"
+        }
+      ]
+    }
+  },
+  "bool_col": {
+    "footer": {
+      "max": "true",
+      "min": "true",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "true",
+      "mean": null,
+      "min": "true",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "true"
+        }
+      ]
+    }
+  },
+  "date_col": {
+    "footer": {
+      "max": "2024-02-29",
+      "min": "2024-02-29",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "2024-02-29",
+      "mean": null,
+      "min": "2024-02-29",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "2024-02-29"
+        }
+      ]
+    }
+  },
+  "decimal_col": {
+    "footer": {
+      "max": "123.45",
+      "min": "123.45",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 123.45,
+          "upper": 123.45
+        }
+      ],
+      "max": "123.45",
+      "mean": 123.45,
+      "min": "123.45",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "123.45"
+        }
+      ]
+    }
+  },
+  "double_col": {
+    "footer": {
+      "max": "2.25",
+      "min": "2.25",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 2.25,
+          "upper": 2.25
+        }
+      ],
+      "max": "2.25",
+      "mean": 2.25,
+      "min": "2.25",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "2.25"
+        }
+      ]
+    }
+  },
+  "float_col": {
+    "footer": {
+      "max": "1.5",
+      "min": "1.5",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 1.5,
+          "upper": 1.5
+        }
+      ],
+      "max": "1.5",
+      "mean": 1.5,
+      "min": "1.5",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "1.5"
+        }
+      ]
+    }
+  },
+  "hugeint_stored_as_double": {
+    "footer": {
+      "max": null,
+      "min": null,
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 170141183460469230000000000000000000000.0,
+          "upper": 170141183460469230000000000000000000000.0
+        }
+      ],
+      "max": "1.7014118346046923e+38",
+      "mean": 170141183460469230000000000000000000000.0,
+      "min": "1.7014118346046923e+38",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "1.7014118346046923e+38"
+        }
+      ]
+    }
+  },
+  "int_col": {
+    "footer": {
+      "max": "3",
+      "min": "3",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 3.0,
+          "upper": 3.0
+        }
+      ],
+      "max": "3",
+      "mean": 3.0,
+      "min": "3",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "3"
+        }
+      ]
+    }
+  },
+  "list_col": {
+    "footer": null,
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "[1, 2, 3]",
+      "mean": null,
+      "min": "[1, 2, 3]",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "[1, 2, 3]"
+        }
+      ]
+    }
+  },
+  "map_col": {
+    "footer": null,
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "{k=1.5}",
+      "mean": null,
+      "min": "{k=1.5}",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "{k=1.5}"
+        }
+      ]
+    }
+  },
+  "nan_col": {
+    "footer": {
+      "max": null,
+      "min": null,
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "nan",
+      "mean": null,
+      "min": "nan",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "nan"
+        }
+      ]
+    }
+  },
+  "smallint_col": {
+    "footer": {
+      "max": "2",
+      "min": "2",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 2.0,
+          "upper": 2.0
+        }
+      ],
+      "max": "2",
+      "mean": 2.0,
+      "min": "2",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "struct_col": {
+    "footer": null,
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "{'a': 1, 'b': x}",
+      "mean": null,
+      "min": "{'a': 1, 'b': x}",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "{'a': 1, 'b': x}"
+        }
+      ]
+    }
+  },
+  "time_col": {
+    "footer": {
+      "max": "13:14:15",
+      "min": "13:14:15",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "13:14:15",
+      "mean": null,
+      "min": "13:14:15",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "13:14:15"
+        }
+      ]
+    }
+  },
+  "tinyint_col": {
+    "footer": {
+      "max": "1",
+      "min": "1",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 1.0,
+          "upper": 1.0
+        }
+      ],
+      "max": "1",
+      "mean": 1.0,
+      "min": "1",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "1"
+        }
+      ]
+    }
+  },
+  "ts_col": {
+    "footer": {
+      "max": "2024-01-02 03:04:05.123456",
+      "min": "2024-01-02 03:04:05.123456",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "2024-01-02 03:04:05.123456",
+      "mean": null,
+      "min": "2024-01-02 03:04:05.123456",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "2024-01-02 03:04:05.123456"
+        }
+      ]
+    }
+  },
+  "tstz_col": {
+    "footer": {
+      "max": "2024-01-02 03:04:05+00",
+      "min": "2024-01-02 03:04:05+00",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "2024-01-02 03:04:05+00",
+      "mean": null,
+      "min": "2024-01-02 03:04:05+00",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "2024-01-02 03:04:05+00"
+        }
+      ]
+    }
+  },
+  "ubigint_col": {
+    "footer": {
+      "max": "18446744073709551615",
+      "min": "18446744073709551615",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [
+        {
+          "count": 1,
+          "lower": 18446744073709552000.0,
+          "upper": 18446744073709552000.0
+        }
+      ],
+      "max": "18446744073709551615",
+      "mean": 18446744073709552000.0,
+      "min": "18446744073709551615",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "18446744073709551615"
+        }
+      ]
+    }
+  },
+  "uuid_col": {
+    "footer": {
+      "max": "0b1f9a0e-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "min": "0b1f9a0e-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "0b1f9a0e-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "mean": null,
+      "min": "0b1f9a0e-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "0b1f9a0e-2c3d-4e5f-8a9b-0c1d2e3f4a5b"
+        }
+      ]
+    }
+  },
+  "varchar_col": {
+    "footer": {
+      "max": "text",
+      "min": "text",
+      "nullCount": 1
+    },
+    "profile": {
+      "distinctCount": 1,
+      "histogram": [],
+      "max": "text",
+      "mean": null,
+      "min": "text",
+      "nullCount": 1,
+      "rows": 2,
+      "stdDev": null,
+      "topValues": [
+        {
+          "count": 1,
+          "value": "text"
+        }
+      ]
+    }
+  }
+}

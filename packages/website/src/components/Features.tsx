@@ -61,8 +61,9 @@ export function Features() {
           File size, row count, row groups, the writer and the full schema, before the first row loads.
         </Card>
 
-        <Card icon={ChartBar} title="Column statistics on demand">
-          Select a column to see its Parquet type, minimum, maximum and null count.
+        <Card icon={ChartBar} title="Column profiles">
+          Footer min, max and null count the moment you select a column. Profile it for distinct and frequent
+          values, mean, spread and a histogram, over the current filter.
         </Card>
 
         <Card icon={Export} title="Export what you see" className="lg:col-span-2">

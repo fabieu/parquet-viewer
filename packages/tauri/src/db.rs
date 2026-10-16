@@ -14,7 +14,8 @@ use serde_json::Value as Json;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::model::{
-    AppError, AppResult, Column, ColumnStats, FileId, FileInfo, OpenedFile, Page, View,
+    AppError, AppResult, Bin, Column, ColumnProfile, FileId, FileInfo, FooterStats, OpenedFile,
+    Page, ValueCount, View,
 };
 
 /// Compression codecs DuckDB can decode. The Parquet spec also has the
@@ -39,6 +40,10 @@ const MAX_SAFE_INT: i64 = (1 << 53) - 1;
 /// take at most this share of DuckDB's memory limit (see
 /// `Engine::source_for`).
 const FULL_COPY_SHARE: f64 = 0.125;
+/// Number of most frequent values in a column profile.
+const TOP_VALUES: usize = 5;
+/// Number of bins in a column profile's histogram.
+const HISTOGRAM_BINS: u64 = 20;
 
 // ---------------------------------------------------------------------------
 // Engine: owns the connection, runs on the worker thread
@@ -486,22 +491,172 @@ impl Engine {
         }
     }
 
-    pub fn column_stats(&self, id: FileId, column: &str) -> AppResult<ColumnStats> {
+    /// `column`'s statistics from the Parquet footer, without a scan.
+    /// `None` for nested columns, whose statistics belong to their leaf
+    /// columns, and for files without row groups.
+    pub fn footer_stats(&self, id: FileId, column: &str) -> AppResult<Option<FooterStats>> {
         let f = self.file(id)?;
-        find_column(&f.columns, column)?;
-        let q = quote_ident(column);
+        let i = column_index(&f.columns, column)?;
+        if matches!(f.kinds[i], Kind::Json) {
+            return Ok(None);
+        }
+        // The footer values are text; compare them as the column's type.
+        // A value counts only if every row group has it.
+        let t = &f.columns[i].duckdb_type;
         let sql = format!(
-            "SELECT CAST(min({q}) AS VARCHAR), CAST(max({q}) AS VARCHAR), \
-             count(*) - count({q}) FROM {}",
-            f.src
+            "SELECT count(*), \
+             count(TRY_CAST(stats_min_value AS {t})), \
+             CAST(min(TRY_CAST(stats_min_value AS {t})) AS VARCHAR), \
+             count(TRY_CAST(stats_max_value AS {t})), \
+             CAST(max(TRY_CAST(stats_max_value AS {t})) AS VARCHAR), \
+             count(stats_null_count), CAST(sum(stats_null_count) AS BIGINT) \
+             FROM parquet_metadata(?) WHERE path_in_schema = ?"
         );
-        Ok(self.conn.query_row(&sql, [], |r| {
-            Ok(ColumnStats {
-                min: r.get(0)?,
-                max: r.get(1)?,
-                null_count: r.get::<_, i64>(2)? as u64,
+        Ok(self
+            .conn
+            .query_row(&sql, [f.info.path.as_str(), column], |r| {
+                let groups: i64 = r.get(0)?;
+                let complete = |i: usize| r.get::<_, i64>(i).map(|n| n == groups);
+                Ok((groups > 0).then_some(FooterStats {
+                    min: if complete(1)? { r.get(2)? } else { None },
+                    max: if complete(3)? { r.get(4)? } else { None },
+                    null_count: if complete(5)? {
+                        r.get::<_, Option<i64>>(6)?.map(|n| n as u64)
+                    } else {
+                        None
+                    },
+                }))
+            })?)
+    }
+
+    /// Statistics of `column` over the rows of `view`. Scans the column,
+    /// after materializing the view if it is not already.
+    pub fn column_profile(
+        &mut self,
+        id: FileId,
+        column: &str,
+        view: &View,
+    ) -> AppResult<ColumnProfile> {
+        let f = self.file(id)?;
+        let i = column_index(&f.columns, column)?;
+        let kind = f.kinds[i];
+        let (source, _) = self.source_for(id, view)?;
+        let from = source.relation(&self.file(id)?.src);
+        let q = quote_ident(column);
+
+        let numeric_aggs = if kind.is_numeric() {
+            format!(
+                "CAST(avg({q}) AS DOUBLE), CAST(stddev_samp({q}) AS DOUBLE), \
+                 CAST(min({q}) AS DOUBLE), CAST(max({q}) AS DOUBLE)"
+            )
+        } else {
+            "NULL::DOUBLE, NULL::DOUBLE, NULL::DOUBLE, NULL::DOUBLE".into()
+        };
+        let (rows, non_null, min, max, mean, std_dev, low, high) = self.conn.query_row(
+            &format!(
+                "SELECT count(*), count({q}), CAST(min({q}) AS VARCHAR), \
+                 CAST(max({q}) AS VARCHAR), {numeric_aggs} FROM {from}"
+            ),
+            [],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)? as u64,
+                    r.get::<_, i64>(1)? as u64,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                    r.get::<_, Option<f64>>(4)?,
+                    r.get::<_, Option<f64>>(5)?,
+                    r.get::<_, Option<f64>>(6)?,
+                    r.get::<_, Option<f64>>(7)?,
+                ))
+            },
+        )?;
+
+        // Grouping by value gives the top values and the distinct count in
+        // one pass.
+        let mut distinct_count = 0;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT CAST(v AS VARCHAR), n, count(*) OVER () FROM \
+             (SELECT {q} AS v, count(*) AS n FROM {from} WHERE {q} IS NOT NULL GROUP BY {q}) \
+             ORDER BY n DESC, v LIMIT {TOP_VALUES}"
+        ))?;
+        let top_values = stmt
+            .query_map([], |r| {
+                distinct_count = r.get::<_, i64>(2)? as u64;
+                Ok(ValueCount {
+                    value: r.get(0)?,
+                    count: r.get::<_, i64>(1)? as u64,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let histogram = match low.zip(high) {
+            Some((low, high)) if low.is_finite() && high.is_finite() => {
+                self.histogram(&from, &q, kind, low, high, non_null)?
+            }
+            _ => Vec::new(),
+        };
+
+        Ok(ColumnProfile {
+            rows,
+            null_count: rows - non_null,
+            distinct_count,
+            min,
+            max,
+            mean: mean.filter(|v| v.is_finite()),
+            std_dev: std_dev.filter(|v| v.is_finite()),
+            top_values,
+            histogram,
+        })
+    }
+
+    /// Equal-width bins over `low..=high` for the numeric column `q`.
+    /// Integers get at most one bin per value.
+    fn histogram(
+        &self,
+        from: &str,
+        q: &str,
+        kind: Kind,
+        low: f64,
+        high: f64,
+        non_null: u64,
+    ) -> AppResult<Vec<Bin>> {
+        if low == high {
+            return Ok(vec![Bin {
+                lower: low,
+                upper: high,
+                count: non_null,
+            }]);
+        }
+        let (span, bins) = if kind.is_integer() {
+            let span = high - low + 1.0;
+            (span, span.min(HISTOGRAM_BINS as f64) as u64)
+        } else {
+            (high - low, HISTOGRAM_BINS)
+        };
+        let width = span / bins as f64;
+        let mut counts = vec![0u64; bins as usize];
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT CAST(floor((CAST({q} AS DOUBLE) - ?) / ?) AS BIGINT), count(*) \
+             FROM {from} WHERE {q} IS NOT NULL GROUP BY ALL"
+        ))?;
+        let rows = stmt.query_map(duckdb::params![low, width], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)? as u64))
+        })?;
+        for row in rows {
+            let (bin, count) = row?;
+            // For floats, the maximum lands one past the last bin.
+            counts[bin.clamp(0, bins as i64 - 1) as usize] += count;
+        }
+        Ok(counts
+            .into_iter()
+            .enumerate()
+            .map(|(i, count)| Bin {
+                lower: low + i as f64 * width,
+                upper: low + (i + 1) as f64 * width,
+                count,
             })
-        })?)
+            .collect())
     }
 
     /// Writes `view` with the values of `columns` (indices into the schema)
@@ -569,6 +724,19 @@ enum Source {
     Materialized(String),
     /// A table with the view's `file_row_number`s.
     RowNumbers(String),
+}
+
+impl Source {
+    /// The view's rows as a SQL relation, given the file's view `src`.
+    fn relation(self, src: &str) -> String {
+        match self {
+            Source::File => src.to_string(),
+            Source::Materialized(table) => table,
+            Source::RowNumbers(table) => format!(
+                "(SELECT * FROM {src} WHERE {FILE_ROW} IN (SELECT {FILE_ROW} FROM {table}))"
+            ),
+        }
+    }
 }
 
 struct PhysicalColumn {
@@ -665,10 +833,10 @@ fn sql_string(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
 
-fn find_column<'a>(columns: &'a [Column], name: &str) -> AppResult<&'a Column> {
+fn column_index(columns: &[Column], name: &str) -> AppResult<usize> {
     columns
         .iter()
-        .find(|c| c.name == name)
+        .position(|c| c.name == name)
         .ok_or_else(|| AppError::UnknownColumn(name.to_string()))
 }
 
@@ -692,8 +860,20 @@ enum Kind {
     Blob,
     /// Lists, structs, maps, unions: fetched with `to_json`.
     Json,
-    /// Everything else (decimals, dates, timestamps, UUIDs, ...) as text.
+    /// Fetched as text, like `Text`, but numeric.
+    Decimal,
+    /// Everything else (dates, timestamps, UUIDs, ...) as text.
     Text,
+}
+
+impl Kind {
+    fn is_integer(self) -> bool {
+        matches!(self, Kind::Int | Kind::BigInt)
+    }
+
+    fn is_numeric(self) -> bool {
+        self.is_integer() || matches!(self, Kind::Float | Kind::Decimal)
+    }
 }
 
 fn kind_of(duckdb_type: &str) -> Kind {
@@ -711,6 +891,7 @@ fn kind_of(duckdb_type: &str) -> Kind {
         "BIGINT" | "UBIGINT" | "HUGEINT" | "UHUGEINT" => Kind::BigInt,
         "FLOAT" | "DOUBLE" => Kind::Float,
         "BLOB" => Kind::Blob,
+        _ if t.starts_with("DECIMAL") => Kind::Decimal,
         _ => Kind::Text,
     }
 }
@@ -725,7 +906,7 @@ fn select_expr(col: &Column, kind: Kind) -> String {
         Kind::Text if col.duckdb_type.starts_with("TIMESTAMP") => {
             format!("replace(CAST({q} AS VARCHAR), ' ', 'T')")
         }
-        Kind::Text => format!("CAST({q} AS VARCHAR)"),
+        Kind::Text | Kind::Decimal => format!("CAST({q} AS VARCHAR)"),
     }
 }
 
@@ -748,7 +929,7 @@ fn read_value(row: &duckdb::Row, i: usize, kind: Kind) -> duckdb::Result<Json> {
         Kind::Json => row.get::<_, Option<String>>(i)?.map_or(Json::Null, |s| {
             serde_json::from_str(&s).unwrap_or(Json::String(s))
         }),
-        Kind::Text => row
+        Kind::Text | Kind::Decimal => row
             .get::<_, Option<String>>(i)?
             .map_or(Json::Null, Json::String),
     })
