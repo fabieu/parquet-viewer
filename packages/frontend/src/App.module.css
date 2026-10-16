@@ -33,10 +33,16 @@
   background: var(--bg);
 }
 
-.brand {
+/* A button that looks like the plain wordmark. */
+.toolbar .brand,
+.toolbar .brand:hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: var(--heading);
   font-size: 15px;
   font-weight: 700;

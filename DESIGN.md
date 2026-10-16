@@ -129,7 +129,8 @@ The window is a vertical flex stack; only the middle row grows.
 
 ### Shell
 
-**`toolbar`** — 56px, `--bg`, bottom hairline. Left: 6px-rounded logo + "Parquet Viewer" brand, then a 1 × 20px
+**`toolbar`** — 56px, `--bg`, bottom hairline. Left: 6px-rounded logo + "Parquet Viewer" brand (a bare button that closes the file and returns to
+the empty state; no hover fill), then a 1 × 20px
 `--border-strong` divider and the open file's name in muted mono (ellipsized). A flex spacer pushes the busy status
 text,
 the nav tabs and the primary "Open" button to the right. Desktop analogue of the website's `{component.top-nav}`.

@@ -6,10 +6,12 @@ import logo from "../../tauri/icons/128x128.png";
 import styles from "./App.module.css";
 import { DataView } from "./components/DataView";
 import { QueryBar } from "./components/QueryBar";
+import { RecentFiles } from "./components/RecentFiles";
 import { Sidebar } from "./components/Sidebar";
 import { api, AppError, EMPTY_VIEW, type Column, type OpenedFile, type View } from "./lib/api";
 import { addFilter, cycleSort } from "./lib/clause";
 import { fileName, formatCount } from "./lib/format";
+import { addRecent, loadRecent, removeRecent, saveRecent } from "./lib/recent";
 
 // Loaded on demand: it bundles a few hundred KB of license notices.
 const AboutDialog = lazy(() => import("./components/AboutDialog").then((m) => ({ default: m.AboutDialog })));
@@ -55,6 +57,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [hiddenColumns, setHiddenColumns] = useState<ReadonlySet<string>>(new Set());
   const [showAbout, setShowAbout] = useState(false);
+  const [recent, setRecent] = useState(loadRecent);
+  useEffect(() => saveRecent(recent), [recent]);
 
   // The open file, for closing it when the next one opens.
   const fileRef = useRef<LoadedFile | null>(null);
@@ -84,8 +88,10 @@ export default function App() {
       setView(EMPTY_VIEW);
       setLoaded({ view: EMPTY_VIEW, rows: opened.info.rowCount });
       setQueryError(null);
+      setRecent((r) => addRecent(r, path));
     } catch (e) {
       setError(describeError(e));
+      if (e instanceof AppError && e.kind === "FileNotFound") setRecent((r) => removeRecent(r, path));
     } finally {
       setBusy(null);
     }
@@ -109,6 +115,16 @@ export default function App() {
     }, reportError);
     return () => unlisten.forEach((u) => u.then((f) => f()));
   }, [openPath, reportError]);
+
+  // Closes the file and goes back to the start screen. The per-file state
+  // is unused there; `openPath` resets it for the next file.
+  const closeFile = () => {
+    if (!file) return;
+    api.closeFile(file.fileId).catch(() => {});
+    setFile(null);
+    setError(null);
+    setNotice(null);
+  };
 
   const chooseFile = async () => {
     const path = await open({
@@ -231,10 +247,10 @@ export default function App() {
   return (
     <div className={dragging ? `${styles.app} ${styles.dragging}` : styles.app}>
       <header className={styles.toolbar}>
-        <div className={styles.brand}>
+        <button type="button" className={styles.brand} onClick={closeFile} title="Back to the start screen">
           <img src={logo} alt="" width={24} height={24} />
           <span>Parquet Viewer</span>
-        </div>
+        </button>
         {file && (
           <>
             <span className={styles.divider} aria-hidden="true" />
@@ -376,6 +392,12 @@ export default function App() {
               </pre>
               <figcaption>Write the WHERE and ORDER BY part in the query bar.</figcaption>
             </figure>
+            <RecentFiles
+              paths={recent}
+              disabled={busy !== null}
+              onOpen={openPath}
+              onRemove={(path) => setRecent((r) => removeRecent(r, path))}
+            />
           </div>
         </main>
       )}

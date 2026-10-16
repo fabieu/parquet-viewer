@@ -46,7 +46,7 @@ The installer registers Parquet Viewer as a viewer for `.parquet` files.
 
 ### Opening a file
 
-Click **Open file**, drop a file anywhere in the window, or pass the file's path as the first argument when launching the app. Files with the `.parquet`, `.parq` and `.pq` extensions are listed in the file dialog.
+Click **Open file**, drop a file anywhere in the window, or pass the file's path as the first argument when launching the app. Files with the `.parquet`, `.parq` and `.pq` extensions are listed in the file dialog. The start screen lists the files you opened recently; click one to open it again.
 
 ![Start screen of Parquet Viewer](docs/home.png)
 
