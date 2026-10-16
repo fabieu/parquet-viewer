@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.0](https://github.com/fabieu/parquet-viewer/compare/v0.4.0...v0.5.0) (2026-10-16)
+
+
+### Features
+
+* filter by a cell's value from its context menu ([3964436](https://github.com/fabieu/parquet-viewer/commit/3964436676b02088f34968eaba26a1f9639ab58a))
+* list recent files on the start screen ([adf52ce](https://github.com/fabieu/parquet-viewer/commit/adf52ced0eaa5be9dc29f95976f5b02f89208916))
+* profile columns with footer stats, top values and a histogram ([0411f9a](https://github.com/fabieu/parquet-viewer/commit/0411f9a0653aadaddb0342cef1f2aa19dde84803))
+
 ## [0.4.0](https://github.com/fabieu/parquet-viewer/compare/v0.3.0...v0.4.0) (2026-10-15)
 
 
