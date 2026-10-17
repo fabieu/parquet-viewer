@@ -23,7 +23,7 @@ Parquet Viewer opens Parquet files of any size in an instant and lets you scroll
 - **Open files any way you like:** from the file dialog, by drag and drop, from the command line, or by double-clicking a `.parquet` file.
 - **Instant metadata:** see the file size, row count, row groups, writer and full schema as soon as the file opens.
 - **Smooth scrolling through huge files:** the grid loads pages on demand and stays responsive at any depth, even in files with 100M+ rows.
-- **Filter and sort with SQL:** type a `WHERE … ORDER BY …` clause and run it, with column and function names suggested as you type. Invalid queries show the exact error and keep the previous result on screen.
+- **Filter and sort with SQL:** type a `WHERE … ORDER BY …` clause and run it, with column and function names suggested as you type and earlier queries a keystroke away. Invalid queries show the exact error and keep the previous result on screen.
 - **Sort by clicking headers:** each click cycles a column through ascending, descending and unsorted.
 - **Column profiles:** min, max and null count from the file footer instantly; on demand, distinct count, most frequent values, mean, standard deviation and a histogram over the current filter.
 - **Choose which columns to show:** hide and show columns from the schema list.
@@ -68,6 +68,8 @@ ORDER BY fare_amount DESC
 ![A filtered and sorted view of a Parquet file](docs/query.png)
 
 As you type, the query bar suggests matching column and function names. Press <kbd>Tab</kbd> to insert the highlighted one, or pick one with the arrow keys and press <kbd>Enter</kbd>. <kbd>Ctrl</kbd>+<kbd>Space</kbd> lists every name.
+
+The queries you run are kept in a history shared by all files. Press <kbd>↑</kbd> and <kbd>↓</kbd> in the query bar to step through it, or click **History** to pick a recent query and run it again.
 
 Clicking a column header rewrites the `ORDER BY` part of the query for you. Right-click a cell to filter by its value: **Filter =** keeps the rows with that value, **Filter !=** removes them, and for numbers and dates **Filter ≥** and **Filter ≤** keep a range. On a `NULL` cell, the menu offers `IS NULL` and `IS NOT NULL` instead. Each choice adds a condition to the `WHERE` part. Click **Clear** to go back to the full file.
 

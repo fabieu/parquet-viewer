@@ -16,10 +16,12 @@ interface Props {
   y: number;
   items: MenuItem[];
   onClose: () => void;
+  /** Extra styles for the menu. */
+  className?: string;
 }
 
 /** A menu at the pointer that closes on outside click, Escape, scroll or blur. */
-export function ContextMenu({ x, y, items, onClose }: Props) {
+export function ContextMenu({ x, y, items, onClose, className }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
 
@@ -53,7 +55,13 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   }, [onClose]);
 
   return (
-    <div ref={ref} className={styles.menu} role="menu" style={pos} onContextMenu={(e) => e.preventDefault()}>
+    <div
+      ref={ref}
+      className={className ? `${styles.menu} ${className}` : styles.menu}
+      role="menu"
+      style={pos}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {items.map((item) => (
         <button
           key={item.label}

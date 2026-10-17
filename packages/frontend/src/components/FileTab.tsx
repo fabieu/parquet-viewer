@@ -25,6 +25,10 @@ interface Props {
   onSidebarWidthChange: (width: number) => void;
   /** Function names for the query bar's autocomplete. */
   functions: readonly string[];
+  /** Queries run before, most recent first, in every file. */
+  history: readonly string[];
+  onRecordQuery: (clause: string) => void;
+  onClearHistory: () => void;
   /** An app-wide operation (such as opening a file) is running. */
   busy: boolean;
   onError: (e: unknown) => void;
@@ -41,6 +45,9 @@ export const FileTab = memo(function FileTab({
   sidebarWidth,
   onSidebarWidthChange,
   functions,
+  history,
+  onRecordQuery,
+  onClearHistory,
   busy,
   onError,
   onNotice,
@@ -176,6 +183,9 @@ export const FileTab = memo(function FileTab({
         columns={file.columns}
         functions={functions}
         onApply={applyClause}
+        history={history}
+        onRecord={onRecordQuery}
+        onClearHistory={onClearHistory}
         error={queryError}
         running={running}
         onExport={exportView}

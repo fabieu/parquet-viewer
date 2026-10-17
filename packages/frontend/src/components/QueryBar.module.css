@@ -42,6 +42,19 @@
   height: 36px;
 }
 
+.historyMenu {
+  max-width: min(640px, calc(100vw - 32px));
+}
+
+.historyMenu button:not(:last-child) span {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-ligatures: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .error {
   margin: 8px 0 0;
   padding: 8px 12px;
