@@ -178,7 +178,7 @@ colors, operators in `--text-muted`, comments in italic `--text-faint`. Selected
 fill instead of the solid yellow, so the colors stay readable.
 
 Autocomplete opens a 360px list 4px below the input, starting under the word being typed: `--surface` on a
-`--border-strong` border, `--radius`, mono 13px rows with the name left and its type (or `function`) right in muted. The
+`--border-strong` border, `--radius`, mono 13px rows with the name left and its type (or `keyword`, `function`) right in muted. The
 highlighted row gets `--bg-hover` and a yellow name. A hairline footer in Inter 12px muted names the keys.
 
 ### Sidebar

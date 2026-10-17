@@ -23,7 +23,7 @@ Parquet Viewer opens Parquet files of any size in an instant and lets you scroll
 - **Open files any way you like:** from the file dialog, by drag and drop, from the command line, or by double-clicking a `.parquet` file.
 - **Instant metadata:** see the file size, row count, row groups, writer and full schema as soon as the file opens.
 - **Smooth scrolling through huge files:** the grid loads pages on demand and stays responsive at any depth, even in files with 100M+ rows.
-- **Filter and sort with SQL:** type a `WHERE … ORDER BY …` clause and run it, and optionally a column list that picks, computes or deduplicates (`DISTINCT`) columns. Column and function names are suggested as you type, and earlier queries are a keystroke away. Invalid queries show the exact error and keep the previous result on screen.
+- **Filter and sort with SQL:** type a `WHERE … ORDER BY …` clause and run it, and optionally a column list that picks, computes or deduplicates (`DISTINCT`) columns. Column names, SQL keywords and functions are suggested as you type, and earlier queries are a keystroke away. Invalid queries show the exact error and keep the previous result on screen.
 - **Sort by clicking headers:** each click cycles a column through ascending, descending and unsorted.
 - **Column profiles:** min, max and null count from the file footer instantly; on demand, distinct count, most frequent values, mean, standard deviation and a histogram over the current filter.
 - **Choose which columns to show:** hide and show columns from the schema list.
@@ -77,7 +77,7 @@ WHERE paid > 150 ORDER BY paid DESC
 
 Computed columns can be used by name in the `WHERE` and `ORDER BY` parts, and the grid, column statistics and export show them like any other column.
 
-As you type, the query bar suggests matching column and function names. Press <kbd>Tab</kbd> to insert the highlighted one, or pick one with the arrow keys and press <kbd>Enter</kbd>. <kbd>Ctrl</kbd>+<kbd>Space</kbd> lists every name.
+As you type, the query bar suggests matching column names, SQL keywords such as `WHERE`, `DISTINCT` and `ORDER BY`, and function names. Press <kbd>Tab</kbd> to insert the highlighted one, or pick one with the arrow keys and press <kbd>Enter</kbd>. <kbd>Ctrl</kbd>+<kbd>Space</kbd> lists every suggestion.
 
 The queries you run are kept in a history shared by all files. Press <kbd>↑</kbd> and <kbd>↓</kbd> in the query bar to step through it, or click **History** to pick a recent query and run it again.
 
