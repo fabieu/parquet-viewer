@@ -30,6 +30,7 @@ cargo test sorts_and_filters                 # single test
 cargo insta review                           # accept changed snapshots (needs cargo-insta)
 
 pnpm run licenses     # regenerate packages/frontend/THIRD_PARTY_LICENSES.json (needs cargo-about); run after dependency changes
+pnpm screenshots      # regenerate docs/*.png and the website's WebP copies (Windows only, needs the DuckDB CLI)
 
 pnpm --filter @parquet-viewer/website dev     # landing page dev server (http://localhost:5173/parquet-viewer/)
 pnpm --filter @parquet-viewer/website build   # tsc + client build + SSR build + prerender into packages/website/dist
@@ -75,7 +76,12 @@ pnpm --filter @parquet-viewer/website build   # tsc + client build + SSR build +
 - Impressum and Datenschutzerklärung are German HTML in `src/legal/*.html`, adapted from the faustball-ux project (same operator; the privacy text is from Datenschutz-Generator.de). Keep the privacy policy in step with the site: it states that the site sets no cookies, uses no analytics and embeds no third-party content, and names GitHub Pages as the host.
 - `src/content.ts` holds the copy shared by the page and the JSON-LD (FAQ, links). Keep the facts in sync with the README.
 - No third-party requests on page load (the privacy policy promises it): fonts are self-hosted via @fontsource, and the Buy Me a Coffee button is a plain link in their colors, not their embed script (which uses `document.write` and loads Google Fonts).
-- `public/screenshots/*.webp` are generated from `docs/*.png`; `public/og.png` is the 1200 × 630 social preview.
+- `public/screenshots/*.webp` are generated from `docs/*.png` by `pnpm screenshots`; `public/og.png` is the 1200 × 630 social preview.
+
+### Screenshots (`scripts/screenshots`)
+
+- `capture.mjs` starts `pnpm tauri dev` with a WebView2 remote-debugging port (9222) and a fresh WebView2 profile in the temp directory, and drives the real app with Playwright over CDP at 1440 × 900.
+- Sample data comes from `sample-data.sql` (synthetic NYC taxi trips, seeded) and is generated into `parquet-viewer-screenshots` in the OS temp directory on first run. The shots show it as `/data/nyc`: the script rewrites the displayed paths just before each capture. Selectors follow the UI's roles and labels, so update the script when the toolbar, sidebar or query bar changes.
 
 ## Conventions
 
