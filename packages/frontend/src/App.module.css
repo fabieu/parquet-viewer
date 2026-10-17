@@ -61,14 +61,82 @@
   background: var(--border-strong);
 }
 
-.fileName {
+/* Open files: grows up to the space between brand and actions, scrolls when full. */
+.tabs {
+  display: flex;
+  gap: 4px;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 240px;
+  border-radius: var(--radius);
+  transition: background-color 0.15s ease;
+}
+
+.tab:has(> [aria-selected="true"]) {
+  background: var(--surface);
+}
+
+.tabs .tabLabel,
+.tabs .tabClose {
+  min-height: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.tabs .tabLabel {
+  min-width: 0;
+  padding: 6px 4px 6px 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 13px;
+}
+
+.tabs .tabLabel[aria-selected="true"],
+.tabs .tabLabel:hover:not(:disabled),
+.tabs .tabClose:hover:not(:disabled) {
+  background: transparent;
+  color: var(--heading);
+}
+
+.tabs .tabClose {
+  padding: 0 10px 0 6px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.toolbar .newTab {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.toolbar .newTab:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--heading);
+}
+
+.newTab svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .spacer {
@@ -128,46 +196,6 @@
 .banner.error {
   background: var(--error-bg);
   color: var(--error-text);
-}
-
-.content {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
-
-/* Straddles the sidebar's right border. */
-.sidebarResize {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  width: 6px;
-  margin: 0 -3px;
-  cursor: col-resize;
-  touch-action: none;
-  transition: background-color 0.15s ease;
-}
-
-.sidebarResize:hover {
-  background: var(--accent);
-}
-
-.statusbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.statusbar span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Empty state: 7/5 hero, copy left, the query it enables right. */

@@ -44,6 +44,11 @@ body {
   overflow: hidden;
 }
 
+/* Elements styled with a `display` still hide. */
+[hidden] {
+  display: none !important;
+}
+
 button,
 select,
 input:not([type="checkbox"]) {

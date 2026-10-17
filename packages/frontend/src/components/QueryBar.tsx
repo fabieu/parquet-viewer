@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useId, type FormEvent } from "react";
 import styles from "./QueryBar.module.css";
 
 interface Props {
@@ -25,6 +25,8 @@ export function QueryBar({
   canExport,
   exporting,
 }: Props) {
+  // Several query bars are mounted at once, one per open file.
+  const id = useId();
   const submit = (e: FormEvent) => {
     e.preventDefault();
     onApply(draft);
@@ -33,11 +35,11 @@ export function QueryBar({
   return (
     <form className={styles.queryBar} onSubmit={submit}>
       <div className={styles.row}>
-        <label htmlFor="query" className={styles.prefix}>
+        <label htmlFor={id} className={styles.prefix}>
           SELECT * FROM file
         </label>
         <input
-          id="query"
+          id={id}
           className={error ? styles.invalid : undefined}
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
@@ -45,7 +47,7 @@ export function QueryBar({
           spellCheck={false}
           autoComplete="off"
           aria-invalid={error !== null}
-          aria-describedby={error ? "query-error" : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
         />
         <button type="submit" className="primary" disabled={running} aria-busy={running}>
           {running ? (
@@ -85,7 +87,7 @@ export function QueryBar({
         </button>
       </div>
       {error && (
-        <p id="query-error" className={styles.error} role="alert">
+        <p id={`${id}-error`} className={styles.error} role="alert">
           {error}
         </p>
       )}
