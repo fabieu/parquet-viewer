@@ -321,6 +321,19 @@ impl Engine {
         Ok(self.file(id)?.columns.clone())
     }
 
+    /// Names of the scalar and aggregate functions and macros a query can
+    /// call, sorted, for autocomplete. Leaves out operators such as `+` and
+    /// internal functions named `__…`.
+    pub fn functions(&self) -> AppResult<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT function_name FROM duckdb_functions() \n             WHERE function_type IN ('scalar', 'aggregate', 'macro') \n             AND regexp_full_match(function_name, '[a-z][a-z0-9_]*') ORDER BY 1",
+        )?;
+        let names = stmt
+            .query_map([], |r| r.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(names)
+    }
+
     /// Rows `offset..offset + limit` of `view`, with the values of
     /// `columns` (indices into the schema) in that order. Reading fewer
     /// columns is much cheaper, since DuckDB decodes whole column chunks.

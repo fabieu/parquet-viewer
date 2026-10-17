@@ -1,9 +1,14 @@
 import { useId, type FormEvent } from "react";
+import type { Column } from "../lib/api";
 import styles from "./QueryBar.module.css";
+import { SqlInput } from "./SqlInput";
 
 interface Props {
   draft: string;
   onDraftChange: (draft: string) => void;
+  /** The names autocomplete offers. */
+  columns: readonly Column[];
+  functions: readonly string[];
   onApply: (clause: string) => void;
   /** DuckDB's message for the last query, if it failed. */
   error: string | null;
@@ -18,6 +23,8 @@ interface Props {
 export function QueryBar({
   draft,
   onDraftChange,
+  columns,
+  functions,
   onApply,
   error,
   running,
@@ -38,11 +45,13 @@ export function QueryBar({
         <label htmlFor={id} className={styles.prefix}>
           SELECT * FROM file
         </label>
-        <input
+        <SqlInput
           id={id}
           className={error ? styles.invalid : undefined}
           value={draft}
-          onChange={(e) => onDraftChange(e.target.value)}
+          onChange={onDraftChange}
+          columns={columns}
+          functions={functions}
           placeholder="WHERE amount > 100 ORDER BY created_at DESC"
           spellCheck={false}
           autoComplete="off"

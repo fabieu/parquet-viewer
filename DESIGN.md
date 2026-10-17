@@ -171,6 +171,10 @@ is `--bg` on a `--border-strong` border, 36px tall, mono 13px, focus → `--acce
 spinning ring while a query runs. Invalid query: input border turns `--error-text`, and a mono error box appears below
 (`--error-bg` fill, 30%-alpha error border, `--radius`, pre-wrapped).
 
+Autocomplete opens a 360px list 4px below the input, starting under the word being typed: `--surface` on a
+`--border-strong` border, `--radius`, mono 13px rows with the name left and its type (or `function`) right in muted. The
+highlighted row gets `--bg-hover` and a yellow name. A hairline footer in Inter 12px muted names the keys.
+
 ### Sidebar
 
 `--bg`, right hairline, 16px padding, user-resizable. Two sections, each headed by a `.section-label`:

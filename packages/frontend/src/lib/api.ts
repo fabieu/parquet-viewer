@@ -115,6 +115,8 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 export const api = {
   openFile: (path: string) => call<OpenedFile>("open_file", { path }),
   getSchema: (fileId: FileId) => call<Column[]>("get_schema", { fileId }),
+  /** Names of the functions a query can call, sorted. */
+  listFunctions: () => call<string[]>("list_functions"),
   /**
    * Rows with the values of `columns` (schema indices) in that order. `seq`
    * marks grid paging requests, which the backend may skip as stale.

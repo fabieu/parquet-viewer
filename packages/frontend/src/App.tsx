@@ -87,6 +87,11 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [recent, setRecent] = useState(loadRecent);
   useEffect(() => saveRecent(recent), [recent]);
+  // Without them, autocomplete offers only column names.
+  const [functions, setFunctions] = useState<string[]>([]);
+  useEffect(() => {
+    api.listFunctions().then(setFunctions, () => {});
+  }, []);
 
   // The open files, for switching to a file's tab instead of opening it twice.
   const tabsRef = useRef(tabs);
@@ -350,6 +355,7 @@ export default function App() {
           showSidebar={showSidebar}
           sidebarWidth={sidebarWidth}
           onSidebarWidthChange={setSidebarWidth}
+          functions={functions}
           busy={busy !== null}
           onError={reportError}
           onNotice={showNotice}

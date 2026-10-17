@@ -24,8 +24,6 @@
 }
 
 .queryBar input {
-  flex: 1;
-  min-width: 0;
   border-color: var(--border-strong);
   background: var(--bg);
 }

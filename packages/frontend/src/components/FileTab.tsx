@@ -23,6 +23,8 @@ interface Props {
   showSidebar: boolean;
   sidebarWidth: number;
   onSidebarWidthChange: (width: number) => void;
+  /** Function names for the query bar's autocomplete. */
+  functions: readonly string[];
   /** An app-wide operation (such as opening a file) is running. */
   busy: boolean;
   onError: (e: unknown) => void;
@@ -38,6 +40,7 @@ export const FileTab = memo(function FileTab({
   showSidebar,
   sidebarWidth,
   onSidebarWidthChange,
+  functions,
   busy,
   onError,
   onNotice,
@@ -170,6 +173,8 @@ export const FileTab = memo(function FileTab({
       <QueryBar
         draft={draft}
         onDraftChange={setDraft}
+        columns={file.columns}
+        functions={functions}
         onApply={applyClause}
         error={queryError}
         running={running}

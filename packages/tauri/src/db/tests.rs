@@ -74,6 +74,20 @@ fn opens_file_and_reads_metadata() {
 }
 
 #[test]
+fn lists_functions_for_autocomplete() {
+    let names = engine().functions().unwrap();
+    for name in ["abs", "count", "lower", "strftime"] {
+        assert!(names.iter().any(|n| n == name), "missing {name}");
+    }
+    assert!(
+        names
+            .iter()
+            .all(|n| !n.starts_with('_') && !n.contains('+'))
+    );
+    assert!(names.windows(2).all(|w| w[0] < w[1]));
+}
+
+#[test]
 fn maps_every_type_to_json() {
     let dir = tempfile::tempdir().unwrap();
     let path = fixture(dir.path(), "types.parquet", ALL_TYPES);

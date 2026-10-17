@@ -21,6 +21,11 @@ pub async fn get_schema(db: State<'_, Db>, file_id: FileId) -> AppResult<Vec<Col
 }
 
 #[tauri::command]
+pub async fn list_functions(db: State<'_, Db>) -> AppResult<Vec<String>> {
+    db.run(|e| e.functions()).await
+}
+
+#[tauri::command]
 pub async fn get_rows(
     db: State<'_, Db>,
     file_id: FileId,
