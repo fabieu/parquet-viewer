@@ -41,6 +41,14 @@ fn engine() -> Engine {
 fn view(clause: &str) -> View {
     View {
         clause: clause.into(),
+        ..View::default()
+    }
+}
+
+fn projected(select: &str, clause: &str) -> View {
+    View {
+        select: select.into(),
+        clause: clause.into(),
     }
 }
 
@@ -71,6 +79,20 @@ fn opens_file_and_reads_metadata() {
     assert_eq!(names, ["id", "bucket", "label"]);
     assert_eq!(schema[0].duckdb_type, "BIGINT");
     assert_eq!(schema[0].physical_type.as_deref(), Some("INT64"));
+}
+
+#[test]
+fn lists_functions_for_autocomplete() {
+    let names = engine().functions().unwrap();
+    for name in ["abs", "count", "lower", "strftime"] {
+        assert!(names.iter().any(|n| n == name), "missing {name}");
+    }
+    assert!(
+        names
+            .iter()
+            .all(|n| !n.starts_with('_') && !n.contains('+'))
+    );
+    assert!(names.windows(2).all(|w| w[0] < w[1]));
 }
 
 #[test]
@@ -167,6 +189,104 @@ fn invalid_sql_fails_and_keeps_the_previous_view() {
     // The last valid view is still materialized.
     assert_eq!(e.files[&id].view.as_ref().unwrap().key, good);
     assert_eq!(ids(&all_rows(&mut e, id, 0, 10, &good).unwrap()), [2, 1, 0]);
+}
+
+#[test]
+fn computes_projected_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    // Aliases work in WHERE and ORDER BY; a duplicate name gets a suffix.
+    let v = projected(
+        "id, id * 2 AS double, label, id",
+        "WHERE double < 8 ORDER BY double DESC",
+    );
+    let schema = e.view_schema(id, &v).unwrap();
+    let names: Vec<_> = schema.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["id", "double", "label", "id_1"]);
+    assert_eq!(schema[1].duckdb_type, "BIGINT");
+    // Reading the schema runs nothing.
+    assert!(e.files[&id].view.is_none());
+
+    let page = e.rows(id, 0, 10, &v, &[3, 1, 2]).unwrap();
+    assert_eq!(page.total_rows, 4);
+    assert_eq!(
+        page.rows,
+        [
+            vec![
+                serde_json::json!(3),
+                serde_json::json!(6),
+                serde_json::json!("row 3")
+            ],
+            vec![
+                serde_json::json!(2),
+                serde_json::json!(4),
+                serde_json::json!("row 2")
+            ],
+            vec![
+                serde_json::json!(1),
+                serde_json::json!(2),
+                serde_json::json!("row 1")
+            ],
+            vec![
+                serde_json::json!(0),
+                serde_json::json!(0),
+                serde_json::json!("row 0")
+            ],
+        ]
+    );
+    // Once materialized, the schema comes from the table.
+    assert_eq!(e.view_schema(id, &v).unwrap().len(), 4);
+    let err = e.rows(id, 0, 10, &v, &[4]).unwrap_err();
+    assert!(matches!(err, AppError::UnknownColumn(_)), "{err:?}");
+}
+
+#[test]
+fn selects_distinct_values_and_profiles_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    // A column list without a clause, and `*`, which is no column list.
+    let v = projected("DISTINCT bucket", "");
+    assert_eq!(e.rows(id, 0, 100, &v, &[0]).unwrap().total_rows, 7);
+    let sorted = projected("DISTINCT bucket % 3 AS b", "ORDER BY b");
+    assert_eq!(ids(&e.rows(id, 0, 10, &sorted, &[0]).unwrap()), [0, 1, 2]);
+    let profile = e.column_profile(id, "b", &sorted).unwrap();
+    assert_eq!((profile.rows, profile.distinct_count), (3, 3));
+    let all = projected(" * ", "WHERE id < 2");
+    assert_eq!(e.view_schema(id, &all).unwrap().len(), 3);
+    assert_eq!(all_rows(&mut e, id, 0, 10, &all).unwrap().total_rows, 2);
+}
+
+#[test]
+fn rejects_bad_column_lists() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let side = dir.path().join("side.csv");
+    let copy = format!(
+        "1; COPY (SELECT 1) TO {} --",
+        sql_string(side.to_str().unwrap())
+    );
+    for bad in ["nope", "id +", "1; DROP VIEW src_1", copy.as_str()] {
+        let v = projected(bad, "");
+        let err = e.view_schema(id, &v).unwrap_err();
+        assert!(matches!(err, AppError::QueryFailed(_)), "{bad}: {err:?}");
+        let err = e.rows(id, 0, 1, &v, &[0]).unwrap_err();
+        assert!(matches!(err, AppError::QueryFailed(_)), "{bad}: {err:?}");
+    }
+    assert!(!side.exists());
+    // A trailing comment in the column list does not swallow the FROM.
+    let v = projected("id -- the id", "WHERE id = 7");
+    assert_eq!(ids(&e.rows(id, 0, 10, &v, &[0]).unwrap()), [7]);
+    let AppError::QueryFailed(message) = e.view_schema(id, &projected("nope", "")).unwrap_err()
+    else {
+        unreachable!()
+    };
+    assert!(!message.contains("src_"), "{message}");
 }
 
 #[test]
@@ -533,6 +653,23 @@ fn exports_the_view_as_parquet() {
     assert_eq!(names, ["id", "bucket"]);
     let page = all_rows(&mut e, opened.file_id, 0, 2, &View::default()).unwrap();
     assert_eq!(ids(&page), [3, 10]);
+}
+
+#[test]
+fn exports_projected_columns_in_view_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = numbers(dir.path());
+    let mut e = engine();
+    let id = e.open(&path).unwrap().file_id;
+    let out = dir.path().join("out.csv");
+    let out = out.to_str().unwrap();
+    let v = projected("id * 10 AS tens, label", "WHERE id < 3 ORDER BY id DESC");
+    e.export(id, &v, &[1, 0], out).unwrap();
+    let csv = std::fs::read_to_string(out).unwrap();
+    assert_eq!(
+        csv.lines().collect::<Vec<_>>(),
+        ["label,tens", "row 2,20", "row 1,10", "row 0,0"]
+    );
 }
 
 #[test]

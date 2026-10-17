@@ -6,8 +6,9 @@ import logo from "../../tauri/icons/128x128.png";
 import styles from "./App.module.css";
 import { FileTab, type LoadedFile } from "./components/FileTab";
 import { RecentFiles } from "./components/RecentFiles";
-import { api, AppError, type FileId } from "./lib/api";
+import { api, AppError, type FileId, type View } from "./lib/api";
 import { fileName } from "./lib/format";
+import { addHistory, loadHistory, saveHistory } from "./lib/history";
 import { moveItem } from "./lib/order";
 import { addRecent, loadRecent, removeRecent, saveRecent } from "./lib/recent";
 
@@ -87,6 +88,15 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [recent, setRecent] = useState(loadRecent);
   useEffect(() => saveRecent(recent), [recent]);
+  const [history, setHistory] = useState(loadHistory);
+  useEffect(() => saveHistory(history), [history]);
+  const recordQuery = useCallback((view: View) => setHistory((h) => addHistory(h, view)), []);
+  const clearHistory = useCallback(() => setHistory([]), []);
+  // Without them, autocomplete offers only column names.
+  const [functions, setFunctions] = useState<string[]>([]);
+  useEffect(() => {
+    api.listFunctions().then(setFunctions, () => {});
+  }, []);
 
   // The open files, for switching to a file's tab instead of opening it twice.
   const tabsRef = useRef(tabs);
@@ -350,6 +360,10 @@ export default function App() {
           showSidebar={showSidebar}
           sidebarWidth={sidebarWidth}
           onSidebarWidthChange={setSidebarWidth}
+          functions={functions}
+          history={history}
+          onRecordQuery={recordQuery}
+          onClearHistory={clearHistory}
           busy={busy !== null}
           onError={reportError}
           onNotice={showNotice}

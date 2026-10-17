@@ -30,13 +30,24 @@ pub struct Column {
     pub nullable: bool,
 }
 
-/// What the grid shows: the file filtered and ordered by `clause`, a
-/// user-written SQL suffix such as `WHERE x > 1 ORDER BY y DESC`.
+/// What the grid shows: the columns of `select`, such as `a, b * 2 AS c`
+/// or `DISTINCT a` (all if empty), of the file filtered and ordered by
+/// `clause`, a user-written SQL suffix such as `WHERE x > 1 ORDER BY y DESC`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct View {
     #[serde(default)]
+    pub select: String,
+    #[serde(default)]
     pub clause: String,
+}
+
+impl View {
+    /// The column list, unless it selects every column as is.
+    pub fn projection(&self) -> Option<&str> {
+        let select = self.select.trim();
+        (!select.is_empty() && select != "*").then_some(select)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

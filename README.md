@@ -23,7 +23,7 @@ Parquet Viewer opens Parquet files of any size in an instant and lets you scroll
 - **Open files any way you like:** from the file dialog, by drag and drop, from the command line, or by double-clicking a `.parquet` file.
 - **Instant metadata:** see the file size, row count, row groups, writer and full schema as soon as the file opens.
 - **Smooth scrolling through huge files:** the grid loads pages on demand and stays responsive at any depth, even in files with 100M+ rows.
-- **Filter and sort with SQL:** type a `WHERE … ORDER BY …` clause and run it. Invalid queries show the exact error and keep the previous result on screen.
+- **Filter and sort with SQL:** type a `WHERE … ORDER BY …` clause and run it, and optionally a column list that picks, computes or deduplicates (`DISTINCT`) columns. Column names, SQL keywords and functions are suggested as you type, and earlier queries are a keystroke away. Invalid queries show the exact error and keep the previous result on screen.
 - **Sort by clicking headers:** each click cycles a column through ascending, descending and unsorted.
 - **Column profiles:** min, max and null count from the file footer instantly; on demand, distinct count, most frequent values, mean, standard deviation and a histogram over the current filter.
 - **Choose which columns to show:** hide and show columns from the schema list.
@@ -58,7 +58,7 @@ The status bar at the bottom shows how many rows and columns are currently visib
 
 ### Filtering and sorting
 
-The query bar runs `SELECT * FROM file` followed by whatever you type. Write a `WHERE` clause, an `ORDER BY` clause, or both, then press <kbd>Enter</kbd> or click **Run**:
+The query bar runs `SELECT * FROM file` followed by whatever you type in its main field. Write a `WHERE` clause, an `ORDER BY` clause, or both, then press <kbd>Enter</kbd> or click **Run**:
 
 ```sql
 WHERE pickup_zone IN ('JFK Airport', 'LaGuardia Airport') AND trip_distance > 18
@@ -66,6 +66,20 @@ ORDER BY fare_amount DESC
 ```
 
 ![A filtered and sorted view of a Parquet file](docs/query.png)
+
+To show other columns than all of them, write a column list in the field after `SELECT`, where `*` stands. Pick columns, compute new ones, or keep only distinct rows:
+
+```sql
+SELECT DISTINCT pickup_zone, round(fare_amount + tip_amount) AS paid
+FROM file
+WHERE paid > 150 ORDER BY paid DESC
+```
+
+Computed columns can be used by name in the `WHERE` and `ORDER BY` parts, and the grid, column statistics and export show them like any other column.
+
+As you type, the query bar suggests matching column names, SQL keywords such as `WHERE`, `DISTINCT` and `ORDER BY`, and function names. Press <kbd>Tab</kbd> to insert the highlighted one, or pick one with the arrow keys and press <kbd>Enter</kbd>. <kbd>Ctrl</kbd>+<kbd>Space</kbd> lists every suggestion.
+
+The queries you run are kept in a history shared by all files. Press <kbd>↑</kbd> and <kbd>↓</kbd> in the query bar to step through it, or click **History** to pick a recent query and run it again.
 
 Clicking a column header rewrites the `ORDER BY` part of the query for you. Right-click a cell to filter by its value: **Filter =** keeps the rows with that value, **Filter !=** removes them, and for numbers and dates **Filter ≥** and **Filter ≤** keep a range. On a `NULL` cell, the menu offers `IS NULL` and `IS NOT NULL` instead. Each choice adds a condition to the `WHERE` part. Click **Clear** to go back to the full file.
 
