@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/fabieu/parquet-viewer/compare/v0.5.0...v0.6.0) (2026-10-17)
+
+
+### Features
+
+* open files in tabs ([e499d4e](https://github.com/fabieu/parquet-viewer/commit/e499d4e1a9ed7e55285bab9acbd8aac52a098659))
+* reorder tabs by dragging them ([7195a60](https://github.com/fabieu/parquet-viewer/commit/7195a606e0657596f42df0e86af35ff17f6ab505))
+
 ## [0.5.0](https://github.com/fabieu/parquet-viewer/compare/v0.4.0...v0.5.0) (2026-10-16)
 
 
