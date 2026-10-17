@@ -1,7 +1,7 @@
 # See all keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
 name = "parquet-viewer"
-version = "0.5.0"
+version = "0.6.0"
 description = "Fast, read-only desktop viewer for Parquet files"
 authors = ["Fabian Eulitz"]
 license = "MIT"
