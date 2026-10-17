@@ -64,7 +64,8 @@ sync**.
 Grid-only values in `theme.ts`: `accentLight` rgba (250, 255, 105, 0.12) for selection fill; `bgSearchResult` #3a3a1f
 (`{colors.primary-disabled}`); `horizontalBorderColor` #1a1a1a so row lines sit quieter than column lines. SQL numbers
 in
-the empty-state code window use #7cb2ff.
+the empty-state code window and the query bar use `--syntax-number` #7cb2ff; the query bar also colors strings
+`--syntax-string` #d4d89a and function names `--syntax-function` #b3cdf5.
 
 ### Shape
 
@@ -170,6 +171,10 @@ close button.
 is `--bg` on a `--border-strong` border, 36px tall, mono 13px, focus → `--accent` border. The Run button shows a 12px
 spinning ring while a query runs. Invalid query: input border turns `--error-text`, and a mono error box appears below
 (`--error-bg` fill, 30%-alpha error border, `--radius`, pre-wrapped).
+
+The query text is syntax-highlighted: keywords in `--accent`, numbers, strings and function names in their `--syntax-*`
+colors, operators in `--text-muted`, comments in italic `--text-faint`. Selected text in the input gets a 25% `--accent`
+fill instead of the solid yellow, so the colors stay readable.
 
 Autocomplete opens a 360px list 4px below the input, starting under the word being typed: `--surface` on a
 `--border-strong` border, `--radius`, mono 13px rows with the name left and its type (or `function`) right in muted. The

@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { Column } from "../lib/api";
 import { complete, type Completion } from "../lib/complete";
+import { highlight } from "../lib/sql";
 import { canvasMeasure, type MeasureText } from "../lib/widths";
 import styles from "./SqlInput.module.css";
 
@@ -21,12 +22,14 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "o
 }
 
 /**
- * A one-line SQL field that suggests column and function names while
- * typing, or on Ctrl+Space. Tab inserts the highlighted name; Enter does
- * too once the arrow keys picked it, and otherwise submits the form.
+ * A one-line SQL field with syntax highlighting that suggests column and
+ * function names while typing, or on Ctrl+Space. Tab inserts the highlighted
+ * name; Enter does too once the arrow keys picked it, and otherwise submits
+ * the form.
  */
 export function SqlInput({ id, value, onChange, columns, functions, onKeyDown, onBlur, ...rest }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const highlightRef = useRef<HTMLSpanElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   // The suggestions, and where the list sits: under the start of the word.
   const [completion, setCompletion] = useState<(Completion & { left: number }) | null>(null);
@@ -61,6 +64,14 @@ export function SqlInput({ id, value, onChange, columns, functions, onKeyDown, o
     inputRef.current?.setSelectionRange(caretAfter.current, caretAfter.current);
     caretAfter.current = null;
   }, [value]);
+
+  // The colored copy of the text lies over the field's transparent text and
+  // follows its horizontal scrolling.
+  const runs = useMemo(() => highlight(value), [value]);
+  const syncScroll = () => {
+    highlightRef.current!.style.transform = `translateX(${-inputRef.current!.scrollLeft}px)`;
+  };
+  useLayoutEffect(syncScroll, [value]);
 
   useLayoutEffect(() => {
     listRef.current?.children[active]?.scrollIntoView({ block: "nearest" });
@@ -119,6 +130,7 @@ export function SqlInput({ id, value, onChange, columns, functions, onKeyDown, o
           suggest(e.target.value);
         }}
         onKeyDown={keyDown}
+        onScroll={syncScroll}
         onMouseDown={() => setCompletion(null)}
         onBlur={(e) => {
           setCompletion(null);
@@ -131,6 +143,15 @@ export function SqlInput({ id, value, onChange, columns, functions, onKeyDown, o
         aria-activedescendant={completion ? `${listId}-${active}` : undefined}
         {...rest}
       />
+      <div className={styles.highlight} aria-hidden="true">
+        <span ref={highlightRef}>
+          {runs.map((r, i) => (
+            <span key={i} className={styles[r.kind]}>
+              {r.text}
+            </span>
+          ))}
+        </span>
+      </div>
       {completion && (
         <div className={styles.popup} style={{ left: completion.left }}>
           <ul ref={listRef} id={listId} role="listbox" aria-label="Suggestions">

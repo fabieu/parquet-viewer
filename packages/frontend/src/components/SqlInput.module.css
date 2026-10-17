@@ -6,6 +6,59 @@
 
 .field input {
   width: 100%;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+/* Translucent, so the colored text above stays readable. */
+.field input::selection {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: transparent;
+}
+
+/* Lies over the input's text, in the same font and position. */
+.highlight {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid transparent;
+  padding: 0 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-ligatures: none;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.highlight > span {
+  display: block;
+}
+
+.keyword {
+  color: var(--accent);
+}
+
+.function {
+  color: var(--syntax-function);
+}
+
+.number {
+  color: var(--syntax-number);
+}
+
+.string {
+  color: var(--syntax-string);
+}
+
+.comment {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.operator {
+  color: var(--text-muted);
 }
 
 .popup {

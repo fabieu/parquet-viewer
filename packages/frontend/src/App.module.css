@@ -298,7 +298,7 @@
 }
 
 .num {
-  color: #7cb2ff;
+  color: var(--syntax-number);
 }
 
 .codeWindow figcaption {

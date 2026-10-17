@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBareName, tokenize } from "./sql";
+import { highlight, isBareName, tokenize } from "./sql";
 
 /** `text` as `kind:text` pairs, without spaces. */
 function tokens(text: string): string[] {
@@ -47,5 +47,27 @@ describe("isBareName", () => {
     expect(isBareName("Order")).toBe(false);
     expect(isBareName("a b")).toBe(false);
     expect(isBareName("2a")).toBe(false);
+  });
+});
+
+describe("highlight", () => {
+  it("marks keywords, function calls, literals and comments", () => {
+    const runs = highlight("WHERE abs (x) > 1 AND name = 'a' -- c")
+      .filter((r) => r.text.trim() !== "")
+      .map((r) => `${r.kind}:${r.text}`);
+    expect(runs).toEqual([
+      "keyword:WHERE",
+      "function:abs",
+      "operator:(",
+      "plain:x",
+      "operator:)",
+      "operator:>",
+      "number:1",
+      "keyword:AND",
+      "plain:name",
+      "operator:=",
+      "string:'a'",
+      "comment:-- c",
+    ]);
   });
 });

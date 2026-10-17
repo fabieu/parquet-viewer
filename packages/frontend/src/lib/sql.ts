@@ -35,6 +35,28 @@ export const KEYWORDS = new Set(
   variadic when where window with`.split(/\s+/),
 );
 
+export type Highlight = "keyword" | "function" | "number" | "string" | "comment" | "operator" | "plain";
+
+const CALL = /\s*\(/y;
+
+/** `text` split into runs to color: keywords, names called as functions, literals and comments. */
+export function highlight(text: string): { kind: Highlight; text: string }[] {
+  return tokenize(text).map((t) => {
+    const value = text.slice(t.start, t.end);
+    let kind: Highlight = "plain";
+    if (t.kind === "word") {
+      CALL.lastIndex = t.end;
+      if (KEYWORDS.has(value.toLowerCase())) kind = "keyword";
+      else if (CALL.test(text)) kind = "function";
+    } else if (t.kind === "number" || t.kind === "string" || t.kind === "comment") {
+      kind = t.kind;
+    } else if (t.kind === "other") {
+      kind = "operator";
+    }
+    return { kind, text: value };
+  });
+}
+
 /** A name that needs no quotes: a plain identifier that is not a keyword. */
 export function isBareName(name: string): boolean {
   return /^[\p{L}_][\p{L}\p{N}_$]*$/u.test(name) && !KEYWORDS.has(name.toLowerCase());
