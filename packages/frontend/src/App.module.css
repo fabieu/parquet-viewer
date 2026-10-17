@@ -61,11 +61,16 @@
   background: var(--border-strong);
 }
 
-/* Open files: grows up to the space between brand and actions, scrolls when full. */
+/* Open files: grows up to the space between brand and actions, scrolls when full.
+   The padding, taken back by the margin, keeps a dragged tab from being clipped:
+   12px covers TAB_LIFT_ROOM (10px, App.tsx) plus the `.dragged` scale's growth,
+   4px the scale's growth sideways. Change them together. */
 .tabs {
   display: flex;
   gap: 4px;
   min-width: 0;
+  margin: -12px -4px;
+  padding: 12px 4px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -76,11 +81,29 @@
   flex-shrink: 0;
   max-width: 240px;
   border-radius: var(--radius);
-  transition: background-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    scale 0.15s ease;
 }
 
 .tab:has(> [aria-selected="true"]) {
   background: var(--surface);
+}
+
+/* Picked up: one depth step up and slightly larger, above the tabs it
+   slides over. No shadow, as everywhere. */
+.tabs .dragged {
+  position: relative;
+  z-index: 1;
+  scale: 1.04;
+  background: var(--bg-hover);
+  outline: 1px solid var(--border-strong);
+  outline-offset: -1px;
+}
+
+.tabs .dragged,
+.tabs .dragged button {
+  cursor: grabbing;
 }
 
 .tabs .tabLabel,

@@ -215,8 +215,10 @@ place display-size type appears in the app.
 - **Focus** is always visible: 2px `--accent` outline with 2px offset; inputs swap their border to `--accent` instead.
 - **Selection** (`::selection`) is yellow with black text.
 - **Motion** is restrained: the empty-state hero rises 12px and fades in (0.6s, `cubic-bezier(0.16, 1, 0.3, 1)`, code
-  window delayed 0.08s); the dialog enters with 8px rise + 0.98 scale (0.25s, same curve). `prefers-reduced-motion`
-  disables all transitions and animations.
+  window delayed 0.08s); the dialog enters with 8px rise + 0.98 scale (0.25s, same curve). A dragged file tab is picked
+  up — `--bg-hover` with a `--border-strong` hairline, scaled to 1.04 (0.15s ease) — and follows the pointer, up to
+  10px above or below its row, while the others slide into their new places; it settles into its slot on release
+  (0.25s, same curve). `prefers-reduced-motion` disables all transitions and animations.
 
 ## Do's and Don'ts
 

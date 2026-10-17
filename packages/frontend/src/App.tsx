@@ -1,17 +1,33 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import logo from "../../tauri/icons/128x128.png";
 import styles from "./App.module.css";
 import { FileTab, type LoadedFile } from "./components/FileTab";
 import { RecentFiles } from "./components/RecentFiles";
 import { api, AppError, type FileId } from "./lib/api";
 import { fileName } from "./lib/format";
+import { moveItem } from "./lib/order";
 import { addRecent, loadRecent, removeRecent, saveRecent } from "./lib/recent";
 
 // Loaded on demand: it bundles a few hundred KB of license notices.
 const AboutDialog = lazy(() => import("./components/AboutDialog").then((m) => ({ default: m.AboutDialog })));
+
+/** Pointer travel, in pixels, before pressing a tab becomes dragging it. */
+const TAB_DRAG_THRESHOLD = 5;
+/** How far, in pixels, a dragged tab follows the pointer up or down; it stays inside the toolbar. */
+const TAB_LIFT_ROOM = 10;
+/** Tabs sliding into place while reordering; the dialog's curve from DESIGN.md. */
+const TAB_SLIDE: KeyframeAnimationOptions = { duration: 250, easing: "cubic-bezier(0.16, 1, 0.3, 1)" };
+
+// The stylesheet's reduced-motion rule does not reach script animations.
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+/** Where each tab in the tab list is laid out. */
+function tabLeftsOf(list: Element): Map<Element, number> {
+  return new Map(([...list.children] as HTMLElement[]).map((el) => [el, el.offsetLeft]));
+}
 
 function describeError(e: unknown): string {
   if (e instanceof AppError) {
@@ -33,6 +49,35 @@ export default function App() {
   // Open files in tab order, and the one shown (null: the start screen).
   const [tabs, setTabs] = useState<LoadedFile[]>([]);
   const [activeId, setActiveId] = useState<FileId | null>(null);
+  const [draggedId, setDraggedId] = useState<FileId | null>(null);
+  // The dragged tab's element, and how to put it back under the pointer
+  // after a reorder.
+  const tabDrag = useRef<{ tab: HTMLElement; place: () => number } | null>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
+  // Where each tab was laid out, to slide the others into new places.
+  const tabLefts = useRef(new Map<Element, number>());
+
+  // While a tab is dragged, the others slide from where they were shown to
+  // their new places; opening or closing a tab does not animate.
+  useLayoutEffect(() => {
+    const drag = tabDrag.current;
+    if (!drag) return;
+    const previous = tabLefts.current;
+    tabLefts.current = tabLeftsOf(tabListRef.current!);
+    drag.place();
+    if (reducedMotion.matches) return;
+    for (const [el, left] of tabLefts.current as Map<HTMLElement, number>) {
+      const before = previous.get(el);
+      if (before === undefined || before === left || el === drag.tab) continue;
+      // A tab still sliding from the last reorder continues from where it is.
+      const shown = before + new DOMMatrix(getComputedStyle(el).transform).m41;
+      el.getAnimations().forEach((a) => a.cancel());
+      el.animate([{ transform: `translateX(${shown - left}px)` }, { transform: "none" }], TAB_SLIDE);
+    }
+  }, [tabs]);
+  // The files' panels stay in the order they were opened (file ids grow),
+  // so reordering tabs does not move a grid around in the DOM.
+  const panels = useMemo(() => [...tabs].sort((a, b) => a.fileId - b.fileId), [tabs]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -119,6 +164,77 @@ export default function App() {
     showNotice(null);
   };
 
+  // Dragging a tab moves it past the tabs whose middle its own middle
+  // crosses; it follows the pointer within the tab list. The list captures
+  // the pointer: it stays in place while React reorders the tabs inside
+  // it, and the drag does not end in a click.
+  const startTabDrag = (e: React.PointerEvent<HTMLElement>, id: FileId) => {
+    if (e.button !== 0) return;
+    const tab = e.currentTarget;
+    const list = tab.parentElement!;
+    const { pointerId, clientX: startX, clientY: startY } = e;
+    const startLeft = tab.offsetLeft;
+    let x = startX;
+    let y = startY;
+    let started = false;
+    // Shifts the tab from its slot to under the pointer, kept within the
+    // list and a little above or below it, and returns the middle the
+    // pointer asks for, which may lie beyond the list: a wide tab still
+    // passes a narrow one at either end. Positions are layout offsets,
+    // which ignore the slide animations.
+    const place = () => {
+      const first = list.firstElementChild as HTMLElement;
+      const last = list.lastElementChild as HTMLElement;
+      const wanted = startLeft + x - startX;
+      const left = Math.min(
+        last.offsetLeft + last.offsetWidth - tab.offsetWidth,
+        Math.max(first.offsetLeft, wanted),
+      );
+      const dy = Math.min(TAB_LIFT_ROOM, Math.max(-TAB_LIFT_ROOM, y - startY));
+      tab.style.translate = `${left - tab.offsetLeft}px ${dy}px`;
+      return wanted + tab.offsetWidth / 2;
+    };
+    const move = (ev: PointerEvent) => {
+      if (!started) {
+        if (Math.abs(ev.clientX - startX) < TAB_DRAG_THRESHOLD) return;
+        started = true;
+        list.setPointerCapture(pointerId);
+        // A running slide would add to the offset that follows the pointer.
+        tab.getAnimations().forEach((a) => a.cancel());
+        tabLefts.current = tabLeftsOf(list);
+        tabDrag.current = { tab, place };
+        setDraggedId(id);
+        setActiveId(id);
+      }
+      x = ev.clientX;
+      y = ev.clientY;
+      const middle = place();
+      const children = [...list.children] as HTMLElement[];
+      const to = children.filter((c) => c !== tab && c.offsetLeft + c.offsetWidth / 2 < middle).length;
+      if (to === children.indexOf(tab)) return;
+      setTabs((ts) => {
+        const from = ts.findIndex((t) => t.fileId === id);
+        return from === to ? ts : moveItem(ts, from, to);
+      });
+    };
+    const listeners = new AbortController();
+    const stop = () => {
+      listeners.abort();
+      if (!started) return;
+      // Settle into the slot from where the pointer let go; the stylesheet
+      // puts the tab down as `.dragged` goes.
+      const from = tab.style.translate;
+      tab.style.translate = "";
+      if (!reducedMotion.matches) tab.animate([{ translate: from }, { translate: "0 0" }], TAB_SLIDE);
+      tabDrag.current = null;
+      setDraggedId(null);
+    };
+    const { signal } = listeners;
+    window.addEventListener("pointermove", move, { signal });
+    window.addEventListener("pointerup", stop, { signal });
+    window.addEventListener("pointercancel", stop, { signal });
+  };
+
   const chooseFiles = async () => {
     const paths = await open({
       multiple: true,
@@ -146,11 +262,15 @@ export default function App() {
           <span>Parquet Viewer</span>
         </button>
         {tabs.length > 0 && <span className={styles.divider} aria-hidden="true" />}
-        <div className={styles.tabs} role="tablist" aria-label="Open files">
+        <div ref={tabListRef} className={styles.tabs} role="tablist" aria-label="Open files">
           {tabs.map((t) => {
             const name = fileName(t.info.path);
             return (
-              <div key={t.fileId} className={styles.tab}>
+              <div
+                key={t.fileId}
+                className={t.fileId === draggedId ? `${styles.tab} ${styles.dragged}` : styles.tab}
+                onPointerDown={(e) => startTabDrag(e, t.fileId)}
+              >
                 <button
                   type="button"
                   role="tab"
@@ -222,7 +342,7 @@ export default function App() {
         </div>
       )}
 
-      {tabs.map((t) => (
+      {panels.map((t) => (
         <FileTab
           key={t.fileId}
           file={t}
