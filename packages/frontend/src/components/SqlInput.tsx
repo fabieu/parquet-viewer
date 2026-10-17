@@ -19,6 +19,8 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "o
   /** The names autocomplete offers. */
   columns: readonly Column[];
   functions: readonly string[];
+  /** Extra styles for the element around the input and its suggestions. */
+  fieldClassName?: string;
 }
 
 /**
@@ -27,7 +29,17 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "o
  * name; Enter does too once the arrow keys picked it, and otherwise submits
  * the form.
  */
-export function SqlInput({ id, value, onChange, columns, functions, onKeyDown, onBlur, ...rest }: Props) {
+export function SqlInput({
+  id,
+  value,
+  onChange,
+  columns,
+  functions,
+  fieldClassName,
+  onKeyDown,
+  onBlur,
+  ...rest
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const highlightRef = useRef<HTMLSpanElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -120,7 +132,7 @@ export function SqlInput({ id, value, onChange, columns, functions, onKeyDown, o
   };
 
   return (
-    <div className={styles.field}>
+    <div className={fieldClassName ? `${styles.field} ${fieldClassName}` : styles.field}>
       <input
         ref={inputRef}
         id={id}

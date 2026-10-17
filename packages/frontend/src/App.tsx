@@ -6,7 +6,7 @@ import logo from "../../tauri/icons/128x128.png";
 import styles from "./App.module.css";
 import { FileTab, type LoadedFile } from "./components/FileTab";
 import { RecentFiles } from "./components/RecentFiles";
-import { api, AppError, type FileId } from "./lib/api";
+import { api, AppError, type FileId, type View } from "./lib/api";
 import { fileName } from "./lib/format";
 import { addHistory, loadHistory, saveHistory } from "./lib/history";
 import { moveItem } from "./lib/order";
@@ -90,7 +90,7 @@ export default function App() {
   useEffect(() => saveRecent(recent), [recent]);
   const [history, setHistory] = useState(loadHistory);
   useEffect(() => saveHistory(history), [history]);
-  const recordQuery = useCallback((clause: string) => setHistory((h) => addHistory(h, clause)), []);
+  const recordQuery = useCallback((view: View) => setHistory((h) => addHistory(h, view)), []);
   const clearHistory = useCallback(() => setHistory([]), []);
   // Without them, autocomplete offers only column names.
   const [functions, setFunctions] = useState<string[]>([]);

@@ -28,6 +28,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
             commands::get_schema,
+            commands::get_view_schema,
             commands::list_functions,
             commands::get_rows,
             commands::get_footer_stats,

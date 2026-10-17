@@ -25,7 +25,7 @@ borders instead of shadows, and yellow reserved for the one primary action and t
 **Key Characteristics:**
 
 - Dark only (`color-scheme: dark`). There is no light theme.
-- Yellow (`--accent`) marks exactly: the primary button in each context, the `WHERE` prefix and SQL keywords, focus
+- Yellow (`--accent`) marks exactly: the primary button in each context, the query-bar prefixes and SQL keywords, focus
   rings, text selection, the busy pill, the version badge, the drop-zone outline and the sidebar resize handle on hover.
 - Data and code — file names, column types, the query input, query errors, license texts — are set in JetBrains Mono.
   Everything else is Inter.
@@ -93,7 +93,7 @@ never loads fonts from the network.
 | Grid cell         | 13px                     | 400     | 0              | Inter  | Cell values                                                 |
 | Status            | 13px / 12px              | 400     | 0              | Inter  | Toolbar status / status bar (tabular nums)                  |
 | Section label     | 12px uppercase           | 600     | 1.5px          | Inter  | `.section-label` ("File", "Schema")                         |
-| Query / file name | 13px                     | 400–500 | 0              | Mono   | Query input, `WHERE` prefix, toolbar file name, query error |
+| Query / file name | 13px                     | 400–500 | 0              | Mono   | Query inputs, prefixes, toolbar file name, query error      |
 | Code window       | 14px                     | 400     | 0              | Mono   | Empty-state SQL, line-height 1.8                            |
 | Column type       | 12px                     | 400     | 0              | Mono   | Sidebar schema list                                         |
 
@@ -167,7 +167,8 @@ close button.
 
 ### Query bar
 
-`--bg-subtle` band, 10px × 16px, bottom hairline. A yellow mono `WHERE` prefix (weight 500) labels the input; the input
+`--bg-subtle` band, 10px × 16px, bottom hairline. Yellow mono prefixes (weight 500) read as one query: `SELECT`, the
+column-list input (up to 260px, placeholder `*`), `FROM file`, then the clause input filling the rest. Each input
 is `--bg` on a `--border-strong` border, 36px tall, mono 13px, focus → `--accent` border. The Run button shows a 12px
 spinning ring while a query runs. Invalid query: input border turns `--error-text`, and a mono error box appears below
 (`--error-bg` fill, 30%-alpha error border, `--radius`, pre-wrapped).

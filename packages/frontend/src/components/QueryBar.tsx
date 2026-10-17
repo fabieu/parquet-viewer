@@ -1,21 +1,21 @@
 import { useCallback, useId, useState, type FormEvent, type KeyboardEvent } from "react";
-import type { Column } from "../lib/api";
-import { stepHistory, type Browsing } from "../lib/history";
+import { EMPTY_VIEW, type Column, type View } from "../lib/api";
+import { historyLabel, stepHistory, type Browsing } from "../lib/history";
 import { ContextMenu } from "./ContextMenu";
 import styles from "./QueryBar.module.css";
 import { SqlInput } from "./SqlInput";
 
 interface Props {
-  draft: string;
-  onDraftChange: (draft: string) => void;
+  draft: View;
+  onDraftChange: (draft: View) => void;
   /** The names autocomplete offers. */
   columns: readonly Column[];
   functions: readonly string[];
-  onApply: (clause: string) => void;
+  onApply: (view: View) => void;
   /** Queries run before, most recent first. */
-  history: readonly string[];
+  history: readonly View[];
   /** Adds a query run from the bar to the history. */
-  onRecord: (clause: string) => void;
+  onRecord: (view: View) => void;
   onClearHistory: () => void;
   /** DuckDB's message for the last query, if it failed. */
   error: string | null;
@@ -26,7 +26,10 @@ interface Props {
   exporting: string | null;
 }
 
-/** A free-text `WHERE … ORDER BY …` suffix, passed to DuckDB as is. */
+/**
+ * `SELECT <columns> FROM file <clause>`: a free-text column list (all
+ * columns if empty) and `WHERE … ORDER BY …` suffix, passed to DuckDB as is.
+ */
 export function QueryBar({
   draft,
   onDraftChange,
@@ -44,19 +47,21 @@ export function QueryBar({
 }: Props) {
   // Several query bars are mounted at once, one per open file.
   const id = useId();
+  const selectId = `${id}-select`;
   // Up and Down step through the history, like in a shell.
   const [browsing, setBrowsing] = useState<Browsing | null>(null);
   // Where the recent-queries menu opens, while it is open.
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
 
-  const edit = (text: string) => {
+  const edit = (view: View) => {
     setBrowsing(null);
-    onDraftChange(text);
+    onDraftChange(view);
   };
-  const run = (text: string) => {
-    if (text.trim() !== "") onRecord(text.trim());
-    onApply(text);
+  const run = (view: View) => {
+    const trimmed = { select: view.select.trim(), clause: view.clause.trim() };
+    if (trimmed.select !== "" || trimmed.clause !== "") onRecord(trimmed);
+    onApply(view);
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -75,14 +80,32 @@ export function QueryBar({
   return (
     <form className={styles.queryBar} onSubmit={submit}>
       <div className={styles.row}>
+        <label htmlFor={selectId} className={styles.prefix}>
+          SELECT
+        </label>
+        <SqlInput
+          id={selectId}
+          fieldClassName={styles.select}
+          className={error ? styles.invalid : undefined}
+          value={draft.select}
+          onChange={(select) => edit({ ...draft, select })}
+          onKeyDown={step}
+          columns={columns}
+          functions={functions}
+          placeholder="*"
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={error !== null}
+          aria-describedby={error ? `${id}-error` : undefined}
+        />
         <label htmlFor={id} className={styles.prefix}>
-          SELECT * FROM file
+          FROM file
         </label>
         <SqlInput
           id={id}
           className={error ? styles.invalid : undefined}
-          value={draft}
-          onChange={edit}
+          value={draft.clause}
+          onChange={(clause) => edit({ ...draft, clause })}
           onKeyDown={step}
           columns={columns}
           functions={functions}
@@ -117,10 +140,10 @@ export function QueryBar({
         </button>
         <button
           type="button"
-          disabled={draft === ""}
+          disabled={draft.select === "" && draft.clause === ""}
           onClick={() => {
-            edit("");
-            onApply("");
+            edit(EMPTY_VIEW);
+            onApply(EMPTY_VIEW);
           }}
         >
           Clear
@@ -149,7 +172,7 @@ export function QueryBar({
           className={styles.historyMenu}
           items={[
             ...history.map((q) => ({
-              label: q,
+              label: historyLabel(q),
               onSelect: () => {
                 edit(q);
                 run(q);

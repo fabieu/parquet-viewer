@@ -25,6 +25,11 @@
   white-space: nowrap;
 }
 
+/* Column lists are usually shorter than the clause. */
+.row .select {
+  flex: 0 1 260px;
+}
+
 .queryBar input {
   border-color: var(--border-strong);
   background: var(--bg);
