@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0](https://github.com/fabieu/parquet-viewer/compare/v0.5.0...v0.6.0) (2026-10-18)
+
+
+### Features
+
+* open files in tabs ([e499d4e](https://github.com/fabieu/parquet-viewer/commit/e499d4e1a9ed7e55285bab9acbd8aac52a098659))
+* query editing — autocomplete, highlighting, history, computed columns ([#12](https://github.com/fabieu/parquet-viewer/issues/12)) ([0881fb6](https://github.com/fabieu/parquet-viewer/commit/0881fb66d2def413bf6ce2f5ec48185183175cd9))
+* reorder tabs by dragging them ([7195a60](https://github.com/fabieu/parquet-viewer/commit/7195a606e0657596f42df0e86af35ff17f6ab505))
+* start the window maximized ([3b748e3](https://github.com/fabieu/parquet-viewer/commit/3b748e3898d09e265bc70a9260c77fcc7374141e))
+
 ## [0.5.0](https://github.com/fabieu/parquet-viewer/compare/v0.4.0...v0.5.0) (2026-10-16)
 
 
