@@ -1,5 +1,5 @@
 import { useCallback, useId, useState, type FormEvent, type KeyboardEvent } from "react";
-import { EMPTY_VIEW, type Column, type View } from "../lib/api";
+import { EMPTY_VIEW, sameView, trimView, type Column, type View } from "../lib/api";
 import { historyLabel, stepHistory, type Browsing } from "../lib/history";
 import { ContextMenu } from "./ContextMenu";
 import styles from "./QueryBar.module.css";
@@ -59,9 +59,9 @@ export function QueryBar({
     onDraftChange(view);
   };
   const run = (view: View) => {
-    const trimmed = { select: view.select.trim(), clause: view.clause.trim() };
-    if (trimmed.select !== "" || trimmed.clause !== "") onRecord(trimmed);
-    onApply(view);
+    const trimmed = trimView(view);
+    if (!sameView(trimmed, EMPTY_VIEW)) onRecord(trimmed);
+    onApply(trimmed);
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();

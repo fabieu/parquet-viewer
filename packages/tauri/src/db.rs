@@ -51,7 +51,7 @@ const HISTOGRAM_BINS: u64 = 20;
 
 struct OpenFile {
     info: FileInfo,
-    columns: Vec<Column>,
+    columns: Columns,
     /// Name of the DuckDB view over `read_parquet`.
     src: String,
     /// Whether `src` exposes `file_row_number` (false if the file has a real
@@ -59,11 +59,14 @@ struct OpenFile {
     has_file_row: bool,
     /// Uncompressed size of all column chunks, to estimate a full copy.
     uncompressed_bytes: u64,
-    /// Per-column SELECT expressions (qualified as `s.…`) and fetch kinds,
-    /// built once for `rows`.
-    exprs: Vec<String>,
-    kinds: Vec<Kind>,
     view: Option<Materialized>,
+}
+
+impl OpenFile {
+    /// The materialization of exactly `view`, if it is the current one.
+    fn materialized(&self, view: &View) -> Option<&Materialized> {
+        self.view.as_ref().filter(|m| m.key == *view)
+    }
 }
 
 struct Materialized {
@@ -73,21 +76,27 @@ struct Materialized {
     row_numbers: bool,
     total: u64,
     /// The view's own columns if it has a column list.
-    columns: Option<ViewColumns>,
+    columns: Option<Columns>,
 }
 
-/// The columns of a view with a column list, read like the file's.
-struct ViewColumns {
+/// The columns a view shows, with their SELECT expressions (qualified as
+/// `s.…`) and fetch kinds, built once for `rows`.
+struct Columns {
     list: Vec<Column>,
     exprs: Vec<String>,
     kinds: Vec<Kind>,
 }
 
-/// The columns a view shows, with their SELECT expressions and fetch kinds.
-struct Columns<'a> {
-    list: &'a [Column],
-    exprs: &'a [String],
-    kinds: &'a [Kind],
+impl Columns {
+    fn new(list: Vec<Column>) -> Self {
+        let kinds: Vec<Kind> = list.iter().map(|c| kind_of(&c.duckdb_type)).collect();
+        let exprs = list
+            .iter()
+            .zip(&kinds)
+            .map(|(c, k)| select_expr(c, *k))
+            .collect();
+        Columns { list, exprs, kinds }
+    }
 }
 
 impl Materialized {
@@ -214,13 +223,7 @@ impl Engine {
             sql_string(path)
         ))?;
 
-        let columns = self.describe(&src, has_file_row, &physical)?;
-        let kinds: Vec<Kind> = columns.iter().map(|c| kind_of(&c.duckdb_type)).collect();
-        let exprs = columns
-            .iter()
-            .zip(&kinds)
-            .map(|(c, k)| select_expr(c, *k))
-            .collect();
+        let columns = Columns::new(self.describe(&src, has_file_row, &physical)?);
         let info = FileInfo {
             path: path.to_string(),
             size_bytes,
@@ -237,8 +240,6 @@ impl Engine {
                 src,
                 has_file_row,
                 uncompressed_bytes,
-                exprs,
-                kinds,
                 view: None,
             },
         );
@@ -334,7 +335,7 @@ impl Engine {
     }
 
     pub fn schema(&self, id: FileId) -> AppResult<Vec<Column>> {
-        Ok(self.file(id)?.columns.clone())
+        Ok(self.file(id)?.columns.list.clone())
     }
 
     /// Names of the scalar and aggregate functions and macros a query can
@@ -386,7 +387,7 @@ impl Engine {
         // Page by a row-number range so DuckDB can skip row groups instead
         // of scanning everything before a deep OFFSET.
         let sql = match &source {
-            Source::Materialized(table) if shadows_rowid(shown.list) => {
+            Source::Materialized(table) if shadows_rowid(&shown.list) => {
                 format!("SELECT {select} FROM {table} s LIMIT {limit} OFFSET {offset}")
             }
             Source::Materialized(table) => format!(
@@ -433,7 +434,7 @@ impl Engine {
         if clause.is_empty() && view.projection().is_none() {
             return Ok((Source::File, f.info.row_count));
         }
-        if let Some(m) = f.view.as_ref().filter(|m| m.key == *view) {
+        if let Some(m) = f.materialized(view) {
             return Ok((m.source(), m.total));
         }
 
@@ -473,7 +474,7 @@ impl Engine {
         }
         let columns = view
             .projection()
-            .map(|_| self.table_columns(&table))
+            .map(|_| self.describe(&table, false, &[]).map(Columns::new))
             .transpose()?;
         let m = Materialized {
             key: view.clone(),
@@ -496,65 +497,24 @@ impl Engine {
 
     /// The columns `view` shows: its own after a column list, which must be
     /// materialized, or else the file's.
-    fn columns_of(&self, id: FileId, view: &View) -> AppResult<Columns<'_>> {
+    fn columns_of(&self, id: FileId, view: &View) -> AppResult<&Columns> {
         let f = self.file(id)?;
-        let own = f.view.as_ref().filter(|m| m.key == *view);
-        Ok(match own.and_then(|m| m.columns.as_ref()) {
-            Some(c) => Columns {
-                list: &c.list,
-                exprs: &c.exprs,
-                kinds: &c.kinds,
-            },
-            None => Columns {
-                list: &f.columns,
-                exprs: &f.exprs,
-                kinds: &f.kinds,
-            },
-        })
-    }
-
-    /// The columns of a temp table, as a view with a column list shows them.
-    fn table_columns(&self, table: &str) -> AppResult<ViewColumns> {
-        let mut stmt = self.conn.prepare(&format!("DESCRIBE {table}"))?;
-        let list = stmt
-            .query_map([], |r| {
-                Ok(Column {
-                    name: r.get(0)?,
-                    duckdb_type: r.get(1)?,
-                    physical_type: None,
-                    logical_type: None,
-                    nullable: true,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        let kinds: Vec<Kind> = list.iter().map(|c| kind_of(&c.duckdb_type)).collect();
-        let exprs = list
-            .iter()
-            .zip(&kinds)
-            .map(|(c, k)| select_expr(c, *k))
-            .collect();
-        Ok(ViewColumns { list, exprs, kinds })
+        Ok(f.materialized(view)
+            .and_then(|m| m.columns.as_ref())
+            .unwrap_or(&f.columns))
     }
 
     /// The columns `view` shows, without running it: for a column list,
-    /// those of an empty table made from the query, which DuckDB names the
-    /// same as the materialized one (`a, a` becomes `a, a_1`).
-    pub fn view_schema(&mut self, id: FileId, view: &View) -> AppResult<Vec<Column>> {
+    /// those of the query as a subquery, which DuckDB names the same as the
+    /// materialized table (`a, a` becomes `a, a_1`).
+    pub fn view_schema(&self, id: FileId, view: &View) -> AppResult<Vec<Column>> {
         let f = self.file(id)?;
-        let materialized = f.view.as_ref().is_some_and(|m| m.key == *view);
-        if view.projection().is_none() || materialized {
-            return Ok(self.columns_of(id, view)?.list.to_vec());
+        if view.projection().is_none() || f.materialized(view).is_some() {
+            return Ok(self.columns_of(id, view)?.list.clone());
         }
         let query = view_query(f, view);
         check_clause(&self.conn, &f.src, &query)?;
-        let probe = format!("probe_{id}_{}", self.next_table);
-        self.next_table += 1;
-        self.conn.execute_batch(&format!(
-            "CREATE TEMP TABLE {probe} AS SELECT * FROM ({query}\n) LIMIT 0"
-        ))?;
-        let columns = self.table_columns(&probe);
-        self.conn.execute_batch(&format!("DROP TABLE {probe}"))?;
-        Ok(columns?.list)
+        self.describe(&format!("SELECT * FROM ({query}\n)"), false, &[])
     }
 
     /// Creates `table` from `query` (see `materialize`) and returns its row
@@ -595,13 +555,13 @@ impl Engine {
     /// columns, and for files without row groups.
     pub fn footer_stats(&self, id: FileId, column: &str) -> AppResult<Option<FooterStats>> {
         let f = self.file(id)?;
-        let i = column_index(&f.columns, column)?;
-        if matches!(f.kinds[i], Kind::Json) {
+        let i = column_index(&f.columns.list, column)?;
+        if matches!(f.columns.kinds[i], Kind::Json) {
             return Ok(None);
         }
         // The footer values are text; compare them as the column's type.
         // A value counts only if every row group has it.
-        let t = &f.columns[i].duckdb_type;
+        let t = &f.columns.list[i].duckdb_type;
         let sql = format!(
             "SELECT count(*), \
              count(TRY_CAST(stats_min_value AS {t})), \
@@ -638,7 +598,7 @@ impl Engine {
     ) -> AppResult<ColumnProfile> {
         let (source, _) = self.source_for(id, view)?;
         let shown = self.columns_of(id, view)?;
-        let kind = shown.kinds[column_index(shown.list, column)?];
+        let kind = shown.kinds[column_index(&shown.list, column)?];
         let from = source.relation(&self.file(id)?.src);
         let q = quote_ident(column);
 
@@ -791,9 +751,10 @@ impl Engine {
         }
         // A column list is exported from its materialized rows, the only
         // place its columns exist.
-        if view.projection().is_some() {
-            self.source_for(id, view)?;
-        }
+        let own = match view.projection() {
+            Some(_) => Some(self.source_for(id, view)?.0),
+            None => None,
+        };
         let f = self.file(id)?;
         let shown = self.columns_of(id, view)?;
         let select = columns
@@ -807,15 +768,15 @@ impl Engine {
             })
             .collect::<AppResult<Vec<_>>>()?
             .join(", ");
-        let own = f
-            .view
-            .as_ref()
-            .filter(|m| m.columns.is_some() && m.key == *view);
         let query = match own {
             // The table holds the rows in view order.
-            Some(m) if shadows_rowid(shown.list) => format!("SELECT {select} FROM {}", m.table),
-            Some(m) => format!("SELECT {select} FROM {} ORDER BY rowid", m.table),
-            None => {
+            Some(Source::Materialized(table)) if shadows_rowid(&shown.list) => {
+                format!("SELECT {select} FROM {table}")
+            }
+            Some(Source::Materialized(table)) => {
+                format!("SELECT {select} FROM {table} ORDER BY rowid")
+            }
+            _ => {
                 let query = format!("SELECT {select} FROM {} {}", f.src, view.clause.trim());
                 check_clause(&self.conn, &f.src, &query)?;
                 query

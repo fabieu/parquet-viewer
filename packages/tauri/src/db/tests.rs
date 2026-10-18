@@ -54,7 +54,7 @@ fn projected(select: &str, clause: &str) -> View {
 
 /// Rows of `view` with every column.
 fn all_rows(e: &mut Engine, id: FileId, offset: u64, limit: u64, view: &View) -> AppResult<Page> {
-    let all: Vec<usize> = (0..e.files[&id].exprs.len()).collect();
+    let all: Vec<usize> = (0..e.files[&id].columns.exprs.len()).collect();
     e.rows(id, offset, limit, view, &all)
 }
 

@@ -101,6 +101,10 @@ export class AppError extends Error {
 
 export const EMPTY_VIEW: View = { select: "", clause: "" };
 
+export function trimView(view: View): View {
+  return { select: view.select.trim(), clause: view.clause.trim() };
+}
+
 /** Whether `view` has its own column list instead of the file's columns. */
 export function hasColumnList(view: View): boolean {
   const select = view.select.trim();

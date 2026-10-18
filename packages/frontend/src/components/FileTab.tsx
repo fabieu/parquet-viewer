@@ -8,6 +8,7 @@ import {
   hasColumnList,
   isPlain,
   sameView,
+  trimView,
   type Column,
   type OpenedFile,
   type View,
@@ -77,7 +78,7 @@ export const FileTab = memo(function FileTab({
     rows: file.info.rowCount,
   });
   // A column list's columns are looked up before the grid shows its view.
-  const [pending, setPending] = useState<View | null>(null);
+  const [pending, setPending] = useState(false);
   // The view last asked for, shown or pending.
   const requested = useRef<View>(EMPTY_VIEW);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -98,25 +99,25 @@ export const FileTab = memo(function FileTab({
 
   const applyView = useCallback(
     (query: View) => {
-      const view = { select: query.select.trim(), clause: query.clause.trim() };
+      const view = trimView(query);
       setQueryError(null);
       if (sameView(view, requested.current)) return;
       requested.current = view;
       if (!hasColumnList(view)) {
-        setPending(null);
+        setPending(false);
         setCurrent({ view, columns: file.columns });
         return;
       }
-      setPending(view);
+      setPending(true);
       api.getViewSchema(file.fileId, view).then(
         (columns) => {
           if (requested.current !== view) return;
-          setPending(null);
+          setPending(false);
           setCurrent({ view, columns });
         },
         (e) => {
           if (requested.current !== view) return;
-          setPending(null);
+          setPending(false);
           requested.current = currentRef.current.view;
           setQueryError(e instanceof AppError ? e.message : String(e));
         },
@@ -184,7 +185,7 @@ export const FileTab = memo(function FileTab({
 
   // A query is running until its first page arrives; meanwhile the grid
   // keeps the previous row count.
-  const running = pending !== null || (!isPlain(current.view) && current !== loaded.showing);
+  const running = pending || (!isPlain(current.view) && current !== loaded.showing);
   const rows = isPlain(current.view) ? file.info.rowCount : loaded.rows;
 
   // Saves the view with its shown columns, in grid order. The backend picks
