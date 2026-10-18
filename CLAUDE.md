@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A read-only Tauri 2 desktop app for viewing Parquet files and filtering/sorting them with a user-typed SQL `WHERE … ORDER BY …` suffix. Rust backend (DuckDB, bundled) in `packages/tauri`, React 18 + TypeScript + Vite frontend in `packages/frontend`, and the project landing page (React 19 + Tailwind v4) in `packages/website`. pnpm workspace; the frontend and website are workspace packages — the Rust crate is built by Cargo/Tauri.
+A read-only Tauri 2 desktop app for viewing Parquet files and filtering/sorting them with a user-typed SQL `WHERE … ORDER BY …` suffix and optional column list (`SELECT <list> FROM file`). Rust backend (DuckDB, bundled) in `packages/tauri`, React 18 + TypeScript + Vite frontend in `packages/frontend`, and the project landing page (React 19 + Tailwind v4) in `packages/website`. pnpm workspace; the frontend and website are workspace packages — the Rust crate is built by Cargo/Tauri.
 
 ## Commands
 
@@ -50,7 +50,7 @@ pnpm --filter @parquet-viewer/website build   # tsc + client build + SSR build +
 - `db.rs` — the core:
   - `duckdb::Connection` isn't `Sync`, so one worker thread owns an `Engine`; `Db` sends closures over an `mpsc` channel and awaits a `oneshot` reply. All queries are serialized through it.
   - Each opened file becomes a DuckDB view over `read_parquet(..., file_row_number = true)`.
-  - Non-empty clauses are **materialized** into a temp table in view order so pages are cheap `rowid` ranges (`Engine::source_for`). Filters and large sorts store only `file_row_number`s and read row values back from the file; sorts whose estimated full copy fits `FULL_COPY_SHARE` of the memory limit copy all columns. One materialized view per file; the previous one is dropped only after the new one succeeds, so an invalid query keeps the last valid result.
+  - A `View` is a column list (`select`, `*` if empty) plus a clause. Non-empty clauses and column lists are **materialized** into a temp table in view order so pages are cheap `rowid` ranges (`Engine::source_for`). Filters and large sorts store only `file_row_number`s and read row values back from the file; sorts whose estimated full copy fits `FULL_COPY_SHARE` of the memory limit copy all columns. A column list is always copied in full, and the view then has its own columns (`Engine::columns_of`); `view_schema` reads them beforehand from a `LIMIT 0` copy, without running the query. One materialized view per file; the previous one is dropped only after the new one succeeds, so an invalid query keeps the last valid result.
   - `check_clause` is the SQL-injection guard: it uses `json_serialize_sql` to ensure the user text forms exactly one SELECT, then `prepare`s it to surface bind errors early. Error messages replace the internal view name with `file`.
   - Paging requests carry a `seq`; `Db::get_rows` returns `AppError::Cancelled` for superseded requests and interrupts a running materialization of a different view.
   - Engine settings worth knowing: extension autoload disabled, spill dir in OS temp, memory limit scaled to 50% of RAM, `compressed_materialization` optimizer disabled to work around a DuckDB bug (covered by the `sorts_and_filters` test), TIMESTAMPTZ rendered in UTC.

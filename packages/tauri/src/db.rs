@@ -51,7 +51,7 @@ const HISTOGRAM_BINS: u64 = 20;
 
 struct OpenFile {
     info: FileInfo,
-    columns: Vec<Column>,
+    columns: Columns,
     /// Name of the DuckDB view over `read_parquet`.
     src: String,
     /// Whether `src` exposes `file_row_number` (false if the file has a real
@@ -59,11 +59,14 @@ struct OpenFile {
     has_file_row: bool,
     /// Uncompressed size of all column chunks, to estimate a full copy.
     uncompressed_bytes: u64,
-    /// Per-column SELECT expressions (qualified as `s.…`) and fetch kinds,
-    /// built once for `rows`.
-    exprs: Vec<String>,
-    kinds: Vec<Kind>,
     view: Option<Materialized>,
+}
+
+impl OpenFile {
+    /// The materialization of exactly `view`, if it is the current one.
+    fn materialized(&self, view: &View) -> Option<&Materialized> {
+        self.view.as_ref().filter(|m| m.key == *view)
+    }
 }
 
 struct Materialized {
@@ -72,6 +75,28 @@ struct Materialized {
     /// Whether `table` holds only `file_row_number`s instead of all columns.
     row_numbers: bool,
     total: u64,
+    /// The view's own columns if it has a column list.
+    columns: Option<Columns>,
+}
+
+/// The columns a view shows, with their SELECT expressions (qualified as
+/// `s.…`) and fetch kinds, built once for `rows`.
+struct Columns {
+    list: Vec<Column>,
+    exprs: Vec<String>,
+    kinds: Vec<Kind>,
+}
+
+impl Columns {
+    fn new(list: Vec<Column>) -> Self {
+        let kinds: Vec<Kind> = list.iter().map(|c| kind_of(&c.duckdb_type)).collect();
+        let exprs = list
+            .iter()
+            .zip(&kinds)
+            .map(|(c, k)| select_expr(c, *k))
+            .collect();
+        Columns { list, exprs, kinds }
+    }
 }
 
 impl Materialized {
@@ -198,13 +223,7 @@ impl Engine {
             sql_string(path)
         ))?;
 
-        let columns = self.describe(&src, has_file_row, &physical)?;
-        let kinds: Vec<Kind> = columns.iter().map(|c| kind_of(&c.duckdb_type)).collect();
-        let exprs = columns
-            .iter()
-            .zip(&kinds)
-            .map(|(c, k)| select_expr(c, *k))
-            .collect();
+        let columns = Columns::new(self.describe(&src, has_file_row, &physical)?);
         let info = FileInfo {
             path: path.to_string(),
             size_bytes,
@@ -221,8 +240,6 @@ impl Engine {
                 src,
                 has_file_row,
                 uncompressed_bytes,
-                exprs,
-                kinds,
                 view: None,
             },
         );
@@ -318,7 +335,20 @@ impl Engine {
     }
 
     pub fn schema(&self, id: FileId) -> AppResult<Vec<Column>> {
-        Ok(self.file(id)?.columns.clone())
+        Ok(self.file(id)?.columns.list.clone())
+    }
+
+    /// Names of the scalar and aggregate functions and macros a query can
+    /// call, sorted, for autocomplete. Leaves out operators such as `+` and
+    /// internal functions named `__…`.
+    pub fn functions(&self) -> AppResult<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT function_name FROM duckdb_functions() \n             WHERE function_type IN ('scalar', 'aggregate', 'macro') \n             AND regexp_full_match(function_name, '[a-z][a-z0-9_]*') ORDER BY 1",
+        )?;
+        let names = stmt
+            .query_map([], |r| r.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(names)
     }
 
     /// Rows `offset..offset + limit` of `view`, with the values of
@@ -333,16 +363,18 @@ impl Engine {
         columns: &[usize],
     ) -> AppResult<Page> {
         let limit = limit.min(MAX_PAGE_ROWS);
+        let (source, total) = self.source_for(id, view)?;
         let f = self.file(id)?;
+        let shown = self.columns_of(id, view)?;
         let mut exprs = Vec::with_capacity(columns.len());
         let mut kinds = Vec::with_capacity(columns.len());
         for &i in columns {
-            let expr = f
+            let expr = shown
                 .exprs
                 .get(i)
                 .ok_or_else(|| AppError::UnknownColumn(i.to_string()))?;
             exprs.push(expr.as_str());
-            kinds.push(f.kinds[i]);
+            kinds.push(shown.kinds[i]);
         }
         // Without columns, a row is empty but the row count still counts.
         let select = if exprs.is_empty() {
@@ -350,14 +382,12 @@ impl Engine {
         } else {
             exprs.join(", ")
         };
-        let (source, total) = self.source_for(id, view)?;
-        let f = self.file(id)?;
         let end = offset.saturating_add(limit);
 
         // Page by a row-number range so DuckDB can skip row groups instead
         // of scanning everything before a deep OFFSET.
         let sql = match &source {
-            Source::Materialized(table) if shadows_rowid(&f.columns) => {
+            Source::Materialized(table) if shadows_rowid(&shown.list) => {
                 format!("SELECT {select} FROM {table} s LIMIT {limit} OFFSET {offset}")
             }
             Source::Materialized(table) => format!(
@@ -401,16 +431,16 @@ impl Engine {
     fn source_for(&mut self, id: FileId, view: &View) -> AppResult<(Source, u64)> {
         let f = self.file(id)?;
         let clause = view.clause.trim();
-        if clause.is_empty() {
+        if clause.is_empty() && view.projection().is_none() {
             return Ok((Source::File, f.info.row_count));
         }
-        if let Some(m) = f.view.as_ref().filter(|m| m.key == *view) {
+        if let Some(m) = f.materialized(view) {
             return Ok((m.source(), m.total));
         }
 
-        // The user's WHERE / ORDER BY text goes to DuckDB as is, but only
-        // as part of a single SELECT (see `check_clause`).
-        let query = format!("SELECT * FROM {} {clause}", f.src);
+        // The user's column list and WHERE / ORDER BY text go to DuckDB as
+        // is, but only as part of a single SELECT (see `check_clause`).
+        let query = view_query(f, view);
         let sorted = check_clause(&self.conn, &f.src, &query)?;
         let numbers = format!("SELECT {FILE_ROW} FROM {} {clause}", f.src);
         let (has_file_row, file_rows, uncompressed) =
@@ -430,8 +460,10 @@ impl Engine {
         // `file_row_number` and pages read their rows from the file. That
         // is cheap for filters, whose rows stay in file order, but sorted
         // rows are scattered over the whole file, so sorts are still copied
-        // in full while the copy fits the budget.
-        let mut row_numbers = has_file_row && !(sorted && fits(file_rows));
+        // in full while the copy fits the budget. A column list computes
+        // its own columns, so its rows are always copied in full.
+        let mut row_numbers =
+            view.projection().is_none() && has_file_row && !(sorted && fits(file_rows));
         let source = if row_numbers { &numbers } else { &query };
         let mut total = self.create(id, view, &table, source)?;
         // A filter may leave few enough rows to copy in full after all.
@@ -440,11 +472,16 @@ impl Engine {
             total = self.create(id, view, &table, &query)?;
             row_numbers = false;
         }
+        let columns = view
+            .projection()
+            .map(|_| self.describe(&table, false, &[]).map(Columns::new))
+            .transpose()?;
         let m = Materialized {
             key: view.clone(),
             table,
             row_numbers,
             total,
+            columns,
         };
         let source = m.source();
         // Keep one materialized view per file. The previous one is dropped
@@ -456,6 +493,28 @@ impl Engine {
                 .execute_batch(&format!("DROP TABLE IF EXISTS {}", old.table))?;
         }
         Ok((source, total))
+    }
+
+    /// The columns `view` shows: its own after a column list, which must be
+    /// materialized, or else the file's.
+    fn columns_of(&self, id: FileId, view: &View) -> AppResult<&Columns> {
+        let f = self.file(id)?;
+        Ok(f.materialized(view)
+            .and_then(|m| m.columns.as_ref())
+            .unwrap_or(&f.columns))
+    }
+
+    /// The columns `view` shows, without running it: for a column list,
+    /// those of the query as a subquery, which DuckDB names the same as the
+    /// materialized table (`a, a` becomes `a, a_1`).
+    pub fn view_schema(&self, id: FileId, view: &View) -> AppResult<Vec<Column>> {
+        let f = self.file(id)?;
+        if view.projection().is_none() || f.materialized(view).is_some() {
+            return Ok(self.columns_of(id, view)?.list.clone());
+        }
+        let query = view_query(f, view);
+        check_clause(&self.conn, &f.src, &query)?;
+        self.describe(&format!("SELECT * FROM ({query}\n)"), false, &[])
     }
 
     /// Creates `table` from `query` (see `materialize`) and returns its row
@@ -496,13 +555,13 @@ impl Engine {
     /// columns, and for files without row groups.
     pub fn footer_stats(&self, id: FileId, column: &str) -> AppResult<Option<FooterStats>> {
         let f = self.file(id)?;
-        let i = column_index(&f.columns, column)?;
-        if matches!(f.kinds[i], Kind::Json) {
+        let i = column_index(&f.columns.list, column)?;
+        if matches!(f.columns.kinds[i], Kind::Json) {
             return Ok(None);
         }
         // The footer values are text; compare them as the column's type.
         // A value counts only if every row group has it.
-        let t = &f.columns[i].duckdb_type;
+        let t = &f.columns.list[i].duckdb_type;
         let sql = format!(
             "SELECT count(*), \
              count(TRY_CAST(stats_min_value AS {t})), \
@@ -537,10 +596,9 @@ impl Engine {
         column: &str,
         view: &View,
     ) -> AppResult<ColumnProfile> {
-        let f = self.file(id)?;
-        let i = column_index(&f.columns, column)?;
-        let kind = f.kinds[i];
         let (source, _) = self.source_for(id, view)?;
+        let shown = self.columns_of(id, view)?;
+        let kind = shown.kinds[column_index(&shown.list, column)?];
         let from = source.relation(&self.file(id)?.src);
         let q = quote_ident(column);
 
@@ -662,7 +720,13 @@ impl Engine {
     /// Writes `view` with the values of `columns` (indices into the schema)
     /// to a new file at `path`, as Parquet or CSV by its extension. Never
     /// writes over the open file itself.
-    pub fn export(&self, id: FileId, view: &View, columns: &[usize], path: &str) -> AppResult<()> {
+    pub fn export(
+        &mut self,
+        id: FileId,
+        view: &View,
+        columns: &[usize],
+        path: &str,
+    ) -> AppResult<()> {
         let f = self.file(id)?;
         let extension = std::path::Path::new(path)
             .extension()
@@ -685,18 +749,39 @@ impl Engine {
                 "Cannot export over the open file; choose another name".into(),
             ));
         }
+        // A column list is exported from its materialized rows, the only
+        // place its columns exist.
+        let own = match view.projection() {
+            Some(_) => Some(self.source_for(id, view)?.0),
+            None => None,
+        };
+        let f = self.file(id)?;
+        let shown = self.columns_of(id, view)?;
         let select = columns
             .iter()
             .map(|&i| {
-                f.columns
+                shown
+                    .list
                     .get(i)
                     .map(|c| quote_ident(&c.name))
                     .ok_or_else(|| AppError::UnknownColumn(i.to_string()))
             })
             .collect::<AppResult<Vec<_>>>()?
             .join(", ");
-        let query = format!("SELECT {select} FROM {} {}", f.src, view.clause.trim());
-        check_clause(&self.conn, &f.src, &query)?;
+        let query = match own {
+            // The table holds the rows in view order.
+            Some(Source::Materialized(table)) if shadows_rowid(&shown.list) => {
+                format!("SELECT {select} FROM {table}")
+            }
+            Some(Source::Materialized(table)) => {
+                format!("SELECT {select} FROM {table} ORDER BY rowid")
+            }
+            _ => {
+                let query = format!("SELECT {select} FROM {} {}", f.src, view.clause.trim());
+                check_clause(&self.conn, &f.src, &query)?;
+                query
+            }
+        };
         // The newline ends a trailing `--` comment in the clause, which
         // would otherwise swallow the rest of the statement.
         self.conn.execute_batch(&format!(
@@ -748,12 +833,12 @@ struct PhysicalColumn {
 
 const ONE_STATEMENT: &str = "Only a WHERE / ORDER BY clause is allowed, without `;`";
 
-/// Parses and binds `SELECT * FROM {src} {clause}` without running it, and
-/// rejects anything but exactly one SELECT. This matters because
-/// duckdb-rs's `prepare` silently executes every statement before the last,
-/// so `WHERE true; DROP …` would otherwise run. Errors name the source
-/// `file`, as the query bar shows it. Returns whether the query has an
-/// ORDER BY.
+/// Parses and binds a query over `src` with the user's column list and
+/// clause without running it, and rejects anything but exactly one SELECT.
+/// This matters because duckdb-rs's `prepare` silently executes every
+/// statement before the last, so `WHERE true; DROP …` would otherwise run.
+/// Errors name the source `file`, as the query bar shows it. Returns whether
+/// the query has an ORDER BY.
 fn check_clause(conn: &Connection, src: &str, query: &str) -> AppResult<bool> {
     // Same length as `src`, so DuckDB's `^` error marker stays aligned.
     let shown = format!("{:<width$}", "file", width = src.len());
@@ -823,6 +908,16 @@ fn setting_bytes(setting: &str) -> Option<u64> {
         .iter()
         .position(|u| *u == unit)?;
     Some((value * 1024f64.powi(power as i32)) as u64)
+}
+
+/// The query for `view` over the file: `SELECT … FROM {src} {clause}`.
+fn view_query(f: &OpenFile, view: &View) -> String {
+    let clause = view.clause.trim();
+    match view.projection() {
+        // The newline ends a trailing `--` comment in the column list.
+        Some(select) => format!("SELECT {select}\nFROM {} {clause}", f.src),
+        None => format!("SELECT * FROM {} {clause}", f.src),
+    }
 }
 
 fn quote_ident(name: &str) -> String {

@@ -20,6 +20,21 @@ pub async fn get_schema(db: State<'_, Db>, file_id: FileId) -> AppResult<Vec<Col
     db.run(move |e| e.schema(file_id)).await
 }
 
+/// The columns `view` shows, without running it.
+#[tauri::command]
+pub async fn get_view_schema(
+    db: State<'_, Db>,
+    file_id: FileId,
+    view: View,
+) -> AppResult<Vec<Column>> {
+    db.run(move |e| e.view_schema(file_id, &view)).await
+}
+
+#[tauri::command]
+pub async fn list_functions(db: State<'_, Db>) -> AppResult<Vec<String>> {
+    db.run(|e| e.functions()).await
+}
+
 #[tauri::command]
 pub async fn get_rows(
     db: State<'_, Db>,

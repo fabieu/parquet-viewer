@@ -15,6 +15,8 @@
 .error {
   font-family: var(--font-mono);
   font-size: 13px;
+  /* JetBrains Mono would draw `>=` as `≥`; show SQL as typed. */
+  font-variant-ligatures: none;
 }
 
 .prefix {
@@ -23,9 +25,12 @@
   white-space: nowrap;
 }
 
+/* Column lists are usually shorter than the clause. */
+.row .select {
+  flex: 0 1 260px;
+}
+
 .queryBar input {
-  flex: 1;
-  min-width: 0;
   border-color: var(--border-strong);
   background: var(--bg);
 }
@@ -40,6 +45,19 @@
 
 .queryBar :is(input, button) {
   height: 36px;
+}
+
+.historyMenu {
+  max-width: min(640px, calc(100vw - 32px));
+}
+
+.historyMenu button:not(:last-child) span {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-ligatures: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .error {

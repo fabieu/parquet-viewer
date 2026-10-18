@@ -87,7 +87,7 @@ export const FAQ = [
   },
   {
     q: "Which SQL can I use to filter and sort?",
-    a: "Anything that fits after SELECT * FROM file: a WHERE clause, an ORDER BY clause, or both. All DuckDB expressions and functions are available. An invalid query shows the exact error and keeps the previous result on screen.",
+    a: "Anything that fits after SELECT * FROM file: a WHERE clause, an ORDER BY clause, or both. You can also replace the * with a column list to pick or compute columns, with DISTINCT if you like. All DuckDB expressions and functions are available. An invalid query shows the exact error and keeps the previous result on screen.",
   },
   {
     q: "Does Parquet Viewer upload or change my data?",

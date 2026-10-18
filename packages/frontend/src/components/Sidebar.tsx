@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   api,
+  hasColumnList,
   isCancelled,
   type Bin,
   type Column,
@@ -18,7 +19,10 @@ interface Props {
   width: number;
   fileId: FileId;
   info: FileInfo;
+  /** The columns the view shows. */
   columns: Column[];
+  /** How many columns the file has. */
+  fileColumns: number;
   hiddenColumns: ReadonlySet<string>;
   /** The view the grid shows, which profiles are computed over. */
   view: View;
@@ -30,7 +34,7 @@ interface Props {
 
 /** Profiles are kept per view and column. */
 function profileKey(view: View, column: string): string {
-  return JSON.stringify([view.clause, column]);
+  return JSON.stringify([view.select, view.clause, column]);
 }
 
 /** Remount per file (`key`), so selection and stats start fresh. */
@@ -40,6 +44,7 @@ export function Sidebar({
   fileId,
   info,
   columns,
+  fileColumns,
   hiddenColumns,
   view,
   running,
@@ -49,11 +54,13 @@ export function Sidebar({
   const [selected, setSelected] = useState<string | null>(null);
   const [footer, setFooter] = useState<Record<string, FooterStats | null | "loading">>({});
   const [profiles, setProfiles] = useState<Record<string, ColumnProfile | "loading">>({});
+  // A column list's columns are not in the file footer.
+  const fromFile = !hasColumnList(view);
 
   const toggle = (name: string) => {
     const next = selected === name ? null : name;
     setSelected(next);
-    if (next === null || footer[next] !== undefined) return;
+    if (next === null || !fromFile || footer[next] !== undefined) return;
     // Footer statistics need no scan, so load them right away.
     setFooter((s) => ({ ...s, [name]: "loading" }));
     api.getFooterStats(fileId, name).then(
@@ -94,7 +101,7 @@ export function Sidebar({
           <dt>Row groups</dt>
           <dd>{formatCount(info.rowGroups)}</dd>
           <dt>Columns</dt>
-          <dd>{formatCount(columns.length)}</dd>
+          <dd>{formatCount(fileColumns)}</dd>
           {info.createdBy && (
             <>
               <dt>Created by</dt>
@@ -126,7 +133,8 @@ export function Sidebar({
               {selected === c.name && (
                 <ColumnDetails
                   column={c}
-                  footer={footer[c.name]}
+                  fromFile={fromFile}
+                  footer={fromFile ? footer[c.name] : undefined}
                   profile={profiles[profileKey(view, c.name)]}
                   canProfile={!running}
                   onProfile={() => profile(c.name)}
@@ -142,6 +150,8 @@ export function Sidebar({
 
 interface DetailsProps {
   column: Column;
+  /** Whether the column is one of the file's, with Parquet metadata. */
+  fromFile: boolean;
   footer: FooterStats | null | "loading" | undefined;
   profile: ColumnProfile | "loading" | undefined;
   canProfile: boolean;
@@ -152,7 +162,7 @@ interface DetailsProps {
  * Min, max and null count come from the file footer until "Load more"
  * scans the column in the current view.
  */
-function ColumnDetails({ column, footer, profile, canProfile, onProfile }: DetailsProps) {
+function ColumnDetails({ column, fromFile, footer, profile, canProfile, onProfile }: DetailsProps) {
   const p = typeof profile === "object" ? profile : null;
   const shown = p
     ? {
@@ -170,10 +180,14 @@ function ColumnDetails({ column, footer, profile, canProfile, onProfile }: Detai
   return (
     <div className={styles.colDetails}>
       <dl className={styles.facts}>
-        <dt>Parquet type</dt>
-        <dd>{[column.physicalType, column.logicalType].filter(Boolean).join(" / ") || "–"}</dd>
-        <dt>Nullable</dt>
-        <dd>{column.nullable ? "yes" : "no"}</dd>
+        {fromFile && (
+          <>
+            <dt>Parquet type</dt>
+            <dd>{[column.physicalType, column.logicalType].filter(Boolean).join(" / ") || "–"}</dd>
+            <dt>Nullable</dt>
+            <dd>{column.nullable ? "yes" : "no"}</dd>
+          </>
+        )}
         <dt>Min</dt>
         <Value text={shown.min} />
         <dt>Max</dt>

@@ -26,8 +26,13 @@ export interface Column {
   nullable: boolean;
 }
 
-/** The file filtered and ordered by `clause`, e.g. `WHERE x > 1 ORDER BY y`. */
+/**
+ * The columns of `select`, e.g. `a, b * 2 AS c` or `DISTINCT a` (all if
+ * empty), of the file filtered and ordered by `clause`, e.g.
+ * `WHERE x > 1 ORDER BY y`.
+ */
 export interface View {
+  select: string;
   clause: string;
 }
 
@@ -94,7 +99,26 @@ export class AppError extends Error {
   }
 }
 
-export const EMPTY_VIEW: View = { clause: "" };
+export const EMPTY_VIEW: View = { select: "", clause: "" };
+
+export function trimView(view: View): View {
+  return { select: view.select.trim(), clause: view.clause.trim() };
+}
+
+/** Whether `view` has its own column list instead of the file's columns. */
+export function hasColumnList(view: View): boolean {
+  const select = view.select.trim();
+  return select !== "" && select !== "*";
+}
+
+/** Whether `view` shows the whole file as is. */
+export function isPlain(view: View): boolean {
+  return view.clause.trim() === "" && !hasColumnList(view);
+}
+
+export function sameView(a: View, b: View): boolean {
+  return a.select === b.select && a.clause === b.clause;
+}
 
 export function isCancelled(e: unknown): boolean {
   return e instanceof AppError && e.kind === "Cancelled";
@@ -115,6 +139,10 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 export const api = {
   openFile: (path: string) => call<OpenedFile>("open_file", { path }),
   getSchema: (fileId: FileId) => call<Column[]>("get_schema", { fileId }),
+  /** The columns `view` shows, without running it; checks its SQL. */
+  getViewSchema: (fileId: FileId, view: View) => call<Column[]>("get_view_schema", { fileId, view }),
+  /** Names of the functions a query can call, sorted. */
+  listFunctions: () => call<string[]>("list_functions"),
   /**
    * Rows with the values of `columns` (schema indices) in that order. `seq`
    * marks grid paging requests, which the backend may skip as stale.

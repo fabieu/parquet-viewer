@@ -1,7 +1,18 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import styles from "./FileTab.module.css";
-import { api, AppError, EMPTY_VIEW, type Column, type OpenedFile, type View } from "../lib/api";
+import {
+  api,
+  AppError,
+  EMPTY_VIEW,
+  hasColumnList,
+  isPlain,
+  sameView,
+  trimView,
+  type Column,
+  type OpenedFile,
+  type View,
+} from "../lib/api";
 import { addFilter, cycleSort } from "../lib/clause";
 import { fileName, formatCount } from "../lib/format";
 import { DataView } from "./DataView";
@@ -15,6 +26,12 @@ export interface LoadedFile extends OpenedFile {
   columns: Column[];
 }
 
+/** A view and the columns it shows. */
+interface Current {
+  view: View;
+  columns: Column[];
+}
+
 interface Props {
   file: LoadedFile;
   /** Hidden rather than unmounted when another tab is active, so the
@@ -23,6 +40,12 @@ interface Props {
   showSidebar: boolean;
   sidebarWidth: number;
   onSidebarWidthChange: (width: number) => void;
+  /** Function names for the query bar's autocomplete. */
+  functions: readonly string[];
+  /** Queries run before, most recent first, in every file. */
+  history: readonly View[];
+  onRecordQuery: (view: View) => void;
+  onClearHistory: () => void;
   /** An app-wide operation (such as opening a file) is running. */
   busy: boolean;
   onError: (e: unknown) => void;
@@ -38,18 +61,26 @@ export const FileTab = memo(function FileTab({
   showSidebar,
   sidebarWidth,
   onSidebarWidthChange,
+  functions,
+  history,
+  onRecordQuery,
+  onClearHistory,
   busy,
   onError,
   onNotice,
 }: Props) {
-  // The query text being edited, the view the grid shows, and the last
-  // view that loaded with its row count (to fall back to after invalid SQL).
-  const [draft, setDraft] = useState("");
-  const [view, setView] = useState<View>(EMPTY_VIEW);
-  const [loaded, setLoaded] = useState<{ view: View; rows: number }>({
-    view: EMPTY_VIEW,
+  // The query being edited, the view the grid shows, and the last view
+  // that loaded with its row count (to fall back to after invalid SQL).
+  const [draft, setDraft] = useState<View>(EMPTY_VIEW);
+  const [current, setCurrent] = useState<Current>({ view: EMPTY_VIEW, columns: file.columns });
+  const [loaded, setLoaded] = useState<{ showing: Current; rows: number }>({
+    showing: current,
     rows: file.info.rowCount,
   });
+  // A column list's columns are looked up before the grid shows its view.
+  const [pending, setPending] = useState(false);
+  // The view last asked for, shown or pending.
+  const requested = useRef<View>(EMPTY_VIEW);
   const [queryError, setQueryError] = useState<string | null>(null);
   // Name of the file being exported to.
   const [exporting, setExporting] = useState<string | null>(null);
@@ -60,21 +91,49 @@ export const FileTab = memo(function FileTab({
   useLayoutEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+  // Read when a view loads or fails, which happens after it is shown.
+  const currentRef = useRef(current);
+  useLayoutEffect(() => {
+    currentRef.current = current;
+  }, [current]);
 
-  const applyClause = useCallback((clause: string) => {
-    const trimmed = clause.trim();
-    setQueryError(null);
-    setView((v) => (v.clause === trimmed ? v : { clause: trimmed }));
-  }, []);
+  const applyView = useCallback(
+    (query: View) => {
+      const view = trimView(query);
+      setQueryError(null);
+      if (sameView(view, requested.current)) return;
+      requested.current = view;
+      if (!hasColumnList(view)) {
+        setPending(false);
+        setCurrent({ view, columns: file.columns });
+        return;
+      }
+      setPending(true);
+      api.getViewSchema(file.fileId, view).then(
+        (columns) => {
+          if (requested.current !== view) return;
+          setPending(false);
+          setCurrent({ view, columns });
+        },
+        (e) => {
+          if (requested.current !== view) return;
+          setPending(false);
+          requested.current = currentRef.current.view;
+          setQueryError(e instanceof AppError ? e.message : String(e));
+        },
+      );
+    },
+    [file],
+  );
 
-  // Puts `rewrite` of the query text in the query bar and runs it.
+  // Puts `rewrite` of the query's clause in the query bar and runs it.
   const rewriteClause = useCallback(
     (rewrite: (clause: string) => string) => {
-      const next = rewrite(draftRef.current);
+      const next = { ...draftRef.current, clause: rewrite(draftRef.current.clause) };
       setDraft(next);
-      applyClause(next);
+      applyView(next);
     },
-    [applyClause],
+    [applyView],
   );
   // Header click rewrites the query's ORDER BY: ascending → descending → off.
   const onSort = useCallback((column: string) => rewriteClause((c) => cycleSort(c, column)), [rewriteClause]);
@@ -117,17 +176,17 @@ export const FileTab = memo(function FileTab({
     });
   }, []);
 
-  // Grid column index → index into `file.columns`; the one place grid
-  // indices are mapped back to file columns.
+  // Grid column index → index into the view's columns; the one place grid
+  // indices are mapped back to view columns.
   const shown = useMemo(
-    () => file.columns.flatMap((c, i) => (hiddenColumns.has(c.name) ? [] : [i])),
-    [file, hiddenColumns],
+    () => current.columns.flatMap((c, i) => (hiddenColumns.has(c.name) ? [] : [i])),
+    [current, hiddenColumns],
   );
 
   // A query is running until its first page arrives; meanwhile the grid
   // keeps the previous row count.
-  const running = view.clause !== "" && view !== loaded.view;
-  const rows = view.clause === "" ? file.info.rowCount : loaded.rows;
+  const running = pending || (!isPlain(current.view) && current !== loaded.showing);
+  const rows = isPlain(current.view) ? file.info.rowCount : loaded.rows;
 
   // Saves the view with its shown columns, in grid order. The backend picks
   // the format from the file extension.
@@ -144,7 +203,7 @@ export const FileTab = memo(function FileTab({
     onNotice(null);
     setExporting(fileName(path));
     try {
-      await api.exportView(file.fileId, view, shown, path);
+      await api.exportView(file.fileId, current.view, shown, path);
       onNotice(`Exported ${formatCount(rows)} rows to ${path}`);
     } catch (e) {
       onError(e);
@@ -153,16 +212,19 @@ export const FileTab = memo(function FileTab({
     }
   };
 
-  const onLoaded = useCallback((view: View, rows: number) => setLoaded({ view, rows }), []);
+  const onLoaded = useCallback((view: View, rows: number) => {
+    if (currentRef.current.view === view) setLoaded({ showing: currentRef.current, rows });
+  }, []);
 
   // The query failed before showing anything: explain why and go back to
   // the last view that worked. The text stays in the field for editing.
   const onViewError = useCallback(
     (failed: View, e: unknown) => {
       setQueryError(e instanceof AppError ? e.message : String(e));
-      setView((v) => (v === failed ? loaded.view : v));
+      setCurrent((c) => (c.view === failed ? loaded.showing : c));
+      if (requested.current === failed) requested.current = loaded.showing.view;
     },
-    [loaded.view],
+    [loaded.showing],
   );
 
   return (
@@ -170,7 +232,12 @@ export const FileTab = memo(function FileTab({
       <QueryBar
         draft={draft}
         onDraftChange={setDraft}
-        onApply={applyClause}
+        columns={file.columns}
+        functions={functions}
+        onApply={applyView}
+        history={history}
+        onRecord={onRecordQuery}
+        onClearHistory={onClearHistory}
         error={queryError}
         running={running}
         onExport={exportView}
@@ -184,9 +251,10 @@ export const FileTab = memo(function FileTab({
           width={sidebarWidth}
           fileId={file.fileId}
           info={file.info}
-          columns={file.columns}
+          columns={current.columns}
+          fileColumns={file.columns.length}
           hiddenColumns={hiddenColumns}
-          view={view}
+          view={current.view}
           running={running}
           onToggleColumn={toggleColumn}
           onError={onError}
@@ -201,9 +269,9 @@ export const FileTab = memo(function FileTab({
         />
         <DataView
           fileId={file.fileId}
-          columns={file.columns}
+          columns={current.columns}
           shown={shown}
-          view={view}
+          view={current.view}
           rows={rows}
           running={running}
           onSort={onSort}
@@ -220,9 +288,9 @@ export const FileTab = memo(function FileTab({
             ? `${formatCount(rows)} of ${formatCount(file.info.rowCount)} rows`
             : `${formatCount(file.info.rowCount)} rows`}
           {" · "}
-          {hiddenColumns.size > 0
-            ? `${formatCount(file.columns.length - hiddenColumns.size)} of ${formatCount(file.columns.length)} columns`
-            : `${formatCount(file.columns.length)} columns`}
+          {shown.length < current.columns.length
+            ? `${formatCount(shown.length)} of ${formatCount(current.columns.length)} columns`
+            : `${formatCount(current.columns.length)} columns`}
           {file.info.compression.length > 0 && ` · ${file.info.compression.join(", ")}`}
         </span>
       </footer>
