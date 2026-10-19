@@ -3,8 +3,10 @@
 name = "parquet-viewer"
 version = "0.6.0"
 description = "Fast, read-only desktop viewer for Parquet files"
-authors = ["Fabian Eulitz"]
+authors = ["Fabian Eulitz <info@sustineo.de>"]
 license = "MIT"
+homepage = "https://fabieu.github.io/parquet-viewer/"
+repository = "https://github.com/fabieu/parquet-viewer"
 edition = "2024"
 publish = false
 
