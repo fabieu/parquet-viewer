@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>de.sustineo.parquetviewer</id>
+  <name>Parquet Viewer</name>
+  <summary>Fast, read-only viewer for Parquet files</summary>
+  <developer id="de.sustineo">
+    <name>Fabian Eulitz</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Parquet Viewer opens Parquet files of any size in an instant and lets you scroll, filter and sort them
+      without importing anything. It reads only the rows you are looking at, so a file with 100 million rows
+      feels as quick as one with a hundred. Everything runs locally on your machine, and files are never modified.
+    </p>
+    <ul>
+      <li>Filter and sort with a SQL WHERE and ORDER BY clause, and pick or compute columns</li>
+      <li>See file metadata, the full schema and column profiles</li>
+      <li>Copy cells and rows, and export the current view as Parquet or CSV</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">Parquet Viewer.desktop</launchable>
+  <url type="homepage">https://fabieu.github.io/parquet-viewer/</url>
+  <url type="bugtracker">https://github.com/fabieu/parquet-viewer/issues</url>
+  <url type="vcs-browser">https://github.com/fabieu/parquet-viewer</url>
+  <url type="contact">mailto:info@sustineo.de</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>A Parquet file with its schema, column statistics and data grid</caption>
+      <image>https://fabieu.github.io/parquet-viewer/screenshots/file-view-1440.webp</image>
+    </screenshot>
+    <screenshot>
+      <caption>Filtering and sorting with SQL</caption>
+      <image>https://fabieu.github.io/parquet-viewer/screenshots/query-1440.webp</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <provides>
+    <mediatype>application/vnd.apache.parquet</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+</component>

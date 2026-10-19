@@ -45,7 +45,30 @@
         "mimeType": "application/vnd.apache.parquet"
       }
     ],
+    "publisher": "Fabian Eulitz",
+    "homepage": "https://fabieu.github.io/parquet-viewer/",
+    "copyright": "Copyright (c) 2026 Fabian Eulitz",
+    "license": "MIT",
     "shortDescription": "Fast, read-only viewer for Parquet files",
-    "category": "DeveloperTool"
+    "longDescription": "Parquet Viewer opens Parquet files of any size in an instant and lets you scroll, filter and sort them with plain SQL, without importing anything. It reads only the rows you are looking at, everything runs locally, and files are never modified.",
+    "category": "DeveloperTool",
+    "linux": {
+      "deb": {
+        "section": "utils",
+        "files": {
+          "/usr/share/metainfo/de.sustineo.parquetviewer.metainfo.xml": "linux/de.sustineo.parquetviewer.metainfo.xml"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/share/metainfo/de.sustineo.parquetviewer.metainfo.xml": "linux/de.sustineo.parquetviewer.metainfo.xml"
+        }
+      },
+      "appimage": {
+        "files": {
+          "/usr/share/metainfo/de.sustineo.parquetviewer.metainfo.xml": "linux/de.sustineo.parquetviewer.metainfo.xml"
+        }
+      }
+    }
   }
 }
