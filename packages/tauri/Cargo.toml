@@ -22,14 +22,14 @@ tauri = { version = "~2.12.3", features = [] }
 tauri-plugin-dialog = { version = "~2.8.2" }
 serde = { version = "~1.0.229", features = ["derive"] }
 serde_json = { version = "~1.0.154" }
-duckdb = { version = "~1.10506.0", features = ["bundled", "parquet", "json"] }
+duckdb = { version = "~1.20000.1", features = ["bundled", "parquet", "json"] }
 thiserror = { version = "~2.0.21" }
-tokio = { version = "~1.53.3", features = ["sync"] }
+tokio = { version = "~1.54.1", features = ["sync"] }
 
 [dev-dependencies]
 insta = { version = "~1.49.0", features = ["json"] }
 tempfile = { version = "~3.27.0" }
-tokio = { version = "~1.53.3", features = ["macros", "rt"] }
+tokio = { version = "~1.54.1", features = ["macros", "rt"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
