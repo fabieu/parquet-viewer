@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/fabieu/parquet-viewer/compare/v0.6.0...v0.6.1) (2026-11-04)
+
+
+### Reverts
+
+* start the window maximized ([#20](https://github.com/fabieu/parquet-viewer/issues/20)) ([2c6b1e7](https://github.com/fabieu/parquet-viewer/commit/2c6b1e730708053a753dd068e9609164be754cb9))
+
 ## [0.6.0](https://github.com/fabieu/parquet-viewer/compare/v0.5.0...v0.6.0) (2026-10-18)
 
 
