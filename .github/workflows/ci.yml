@@ -59,6 +59,12 @@ jobs:
         with:
           workspaces: packages/tauri
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      # rust-cache strips the files out of target/duckdb-sources but keeps the
+      # folders, and libduckdb-sys then fails to unpack over them. Unpacking
+      # again is cheap; the compiled DuckDB in the build dir stays cached.
+      - name: Drop pruned DuckDB sources
+        shell: bash
+        run: rm -rf target/duckdb-sources
       # tauri::generate_context! needs the frontend build output to exist.
       - name: Stub frontend dist
         shell: bash
