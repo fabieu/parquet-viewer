@@ -380,7 +380,8 @@ fn reads_footer_stats() {
     let path = fixture(
         dir.path(),
         "footer.parquet",
-        "SELECT i AS id, CASE WHEN i % 10 <> 0 THEN 'row ' || i END AS label, [i] AS list          FROM range(5000) t(i)",
+        "SELECT i AS id, CASE WHEN i % 10 <> 0 THEN 'row ' || i END AS label, [i] AS list \
+         FROM range(5000) t(i)",
     );
     let mut e = engine();
     let id = e.open(&path).unwrap().file_id;
@@ -713,7 +714,8 @@ fn parses_memory_settings() {
 /// `cargo test bench_large_file -- --ignored --nocapture`; set
 /// `PV_BENCH_ROWS` to change the size (default 100M rows).
 #[test]
-#[ignore]
+#[ignore = "benchmark; run manually with --ignored"]
+#[expect(clippy::cast_precision_loss, reason = "file size for display only")]
 fn bench_large_file() {
     use std::time::Instant;
     let rows: u64 = std::env::var("PV_BENCH_ROWS")
@@ -748,7 +750,7 @@ fn bench_large_file() {
     for offset in [0, rows / 2, rows - 500] {
         let t = Instant::now();
         let page = all_rows(&mut e, id, offset, 500, &unsorted).unwrap();
-        assert_eq!(page.rows[0][0].as_i64().unwrap() as u64, offset);
+        assert_eq!(page.rows[0][0].as_u64().unwrap(), offset);
         println!("unsorted page @ {offset}: {:?}", t.elapsed());
     }
 

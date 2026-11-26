@@ -2,27 +2,45 @@ use std::sync::Mutex;
 
 use tauri::State;
 
-use crate::db::Db;
+use crate::db::{Db, lock};
 use crate::model::{AppResult, Column, ColumnProfile, FileId, FooterStats, OpenedFile, Page, View};
 
 /// A file passed on the command line or through the OS "open with" event,
 /// waiting for the UI to pick it up.
 #[derive(Default)]
-pub struct PendingOpen(pub Mutex<Option<String>>);
+pub(crate) struct PendingOpen(Mutex<Option<String>>);
+
+impl PendingOpen {
+    pub(crate) fn new(path: Option<String>) -> Self {
+        Self(Mutex::new(path))
+    }
+
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "ios")),
+        expect(dead_code, reason = "only macOS opens files while running")
+    )]
+    pub(crate) fn set(&self, path: String) {
+        *lock(&self.0) = Some(path);
+    }
+
+    fn take(&self) -> Option<String> {
+        lock(&self.0).take()
+    }
+}
 
 #[tauri::command]
-pub async fn open_file(db: State<'_, Db>, path: String) -> AppResult<OpenedFile> {
+pub(crate) async fn open_file(db: State<'_, Db>, path: String) -> AppResult<OpenedFile> {
     db.run(move |e| e.open(&path)).await
 }
 
 #[tauri::command]
-pub async fn get_schema(db: State<'_, Db>, file_id: FileId) -> AppResult<Vec<Column>> {
+pub(crate) async fn get_schema(db: State<'_, Db>, file_id: FileId) -> AppResult<Vec<Column>> {
     db.run(move |e| e.schema(file_id)).await
 }
 
 /// The columns `view` shows, without running it.
 #[tauri::command]
-pub async fn get_view_schema(
+pub(crate) async fn get_view_schema(
     db: State<'_, Db>,
     file_id: FileId,
     view: View,
@@ -31,12 +49,12 @@ pub async fn get_view_schema(
 }
 
 #[tauri::command]
-pub async fn list_functions(db: State<'_, Db>) -> AppResult<Vec<String>> {
+pub(crate) async fn list_functions(db: State<'_, Db>) -> AppResult<Vec<String>> {
     db.run(|e| e.functions()).await
 }
 
 #[tauri::command]
-pub async fn get_rows(
+pub(crate) async fn get_rows(
     db: State<'_, Db>,
     file_id: FileId,
     offset: u64,
@@ -50,7 +68,7 @@ pub async fn get_rows(
 }
 
 #[tauri::command]
-pub async fn get_footer_stats(
+pub(crate) async fn get_footer_stats(
     db: State<'_, Db>,
     file_id: FileId,
     column: String,
@@ -59,7 +77,7 @@ pub async fn get_footer_stats(
 }
 
 #[tauri::command]
-pub async fn get_column_profile(
+pub(crate) async fn get_column_profile(
     db: State<'_, Db>,
     file_id: FileId,
     column: String,
@@ -70,7 +88,7 @@ pub async fn get_column_profile(
 }
 
 #[tauri::command]
-pub async fn export_view(
+pub(crate) async fn export_view(
     db: State<'_, Db>,
     file_id: FileId,
     view: View,
@@ -82,11 +100,15 @@ pub async fn export_view(
 }
 
 #[tauri::command]
-pub async fn close_file(db: State<'_, Db>, file_id: FileId) -> AppResult<()> {
+pub(crate) async fn close_file(db: State<'_, Db>, file_id: FileId) -> AppResult<()> {
     db.close(file_id).await
 }
 
 #[tauri::command]
-pub fn take_pending_open(pending: State<'_, PendingOpen>) -> Option<String> {
-    pending.0.lock().unwrap().take()
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri passes command state by value"
+)]
+pub(crate) fn take_pending_open(pending: State<'_, PendingOpen>) -> Option<String> {
+    pending.take()
 }
