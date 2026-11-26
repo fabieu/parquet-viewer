@@ -7,6 +7,11 @@ use commands::PendingOpen;
 use tauri::Emitter;
 use tauri::Manager;
 
+/// Starts DuckDB and runs the app until it exits.
+///
+/// # Panics
+///
+/// Panics if DuckDB or the Tauri app fails to start.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let db = db::Db::start().expect("failed to start DuckDB");
@@ -16,7 +21,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(db)
-        .manage(PendingOpen(std::sync::Mutex::new(launch_path)))
+        .manage(PendingOpen::new(launch_path))
         .setup(|app| {
             // The title shows the app and its version, never the open file.
             let info = app.package_info();
@@ -39,15 +44,17 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, _event| {
+        .run(|app, event| {
             // macOS delivers file associations as an event instead of an argument.
             #[cfg(any(target_os = "macos", target_os = "ios"))]
-            if let tauri::RunEvent::Opened { urls } = _event
+            if let tauri::RunEvent::Opened { urls } = event
                 && let Some(path) = urls.into_iter().find_map(|u| u.to_file_path().ok())
             {
                 let path = path.to_string_lossy().into_owned();
-                *_app.state::<PendingOpen>().0.lock().unwrap() = Some(path.clone());
-                let _ = _app.emit("open-file", path);
+                app.state::<PendingOpen>().set(path.clone());
+                let _ = app.emit("open-file", path);
             }
+            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+            let _ = (app, event);
         });
 }

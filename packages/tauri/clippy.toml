@@ -1,0 +1,2 @@
+# Product names in doc comments that are not code items.
+doc-valid-idents = ["DuckDB", ".."]

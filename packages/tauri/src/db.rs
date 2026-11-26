@@ -5,9 +5,11 @@
 //! closure over an `mpsc` channel and awaits the reply on a `oneshot` channel.
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::{Arc, Mutex};
+use std::num::NonZero;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use duckdb::{Connection, InterruptHandle};
 use serde_json::Value as Json;
@@ -31,19 +33,19 @@ const SUPPORTED_CODECS: [&str; 6] = [
 /// Pseudo column added by `read_parquet(..., file_row_number = true)`.
 const FILE_ROW: &str = "file_row_number";
 /// Upper bound for a single `get_rows` request.
-pub const MAX_PAGE_ROWS: u64 = 10_000;
+pub(crate) const MAX_PAGE_ROWS: u64 = 10_000;
 /// Blobs are shown as a hex preview of this many bytes.
 const BLOB_PREVIEW_BYTES: usize = 32;
 /// Largest integer a JavaScript number represents exactly.
 const MAX_SAFE_INT: i64 = (1 << 53) - 1;
 /// A sorted view is copied in full only while that copy is estimated to
-/// take at most this share of DuckDB's memory limit (see
+/// take at most this fraction (1/n) of DuckDB's memory limit (see
 /// `Engine::source_for`).
-const FULL_COPY_SHARE: f64 = 0.125;
+const FULL_COPY_DIVISOR: u64 = 8;
 /// Number of most frequent values in a column profile.
 const TOP_VALUES: usize = 5;
 /// Number of bins in a column profile's histogram.
-const HISTOGRAM_BINS: u64 = 20;
+const HISTOGRAM_BINS: u32 = 20;
 
 // ---------------------------------------------------------------------------
 // Engine: owns the connection, runs on the worker thread
@@ -95,7 +97,7 @@ impl Columns {
             .zip(&kinds)
             .map(|(c, k)| select_expr(c, *k))
             .collect();
-        Columns { list, exprs, kinds }
+        Self { list, exprs, kinds }
     }
 }
 
@@ -119,7 +121,7 @@ struct Running {
 
 type RunningSlot = Arc<Mutex<Option<Running>>>;
 
-pub struct Engine {
+pub(crate) struct Engine {
     conn: Connection,
     files: HashMap<FileId, OpenFile>,
     next_id: FileId,
@@ -129,11 +131,9 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new() -> AppResult<Self> {
+    pub(crate) fn new() -> AppResult<Self> {
         let conn = Connection::open_in_memory()?;
-        let threads = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4);
+        let threads = std::thread::available_parallelism().map_or(4, NonZero::get);
         // Parquet and JSON are compiled in; never download extensions.
         conn.execute_batch(&format!(
             "SET autoinstall_known_extensions = false; SET autoload_known_extensions = false; \
@@ -151,11 +151,11 @@ impl Engine {
         // Its default limit is 80% of RAM; scale that down to 50%.
         let default_limit: String =
             conn.query_row("SELECT current_setting('memory_limit')", [], |r| r.get(0))?;
-        let limit = setting_bytes(&default_limit).map(|b| (b as f64 * 0.5 / 0.8) as u64);
+        let limit = setting_bytes(&default_limit).map(|b| b / 8 * 5);
         if let Some(limit) = limit {
             conn.execute_batch(&format!("SET memory_limit = '{limit}B';"))?;
         }
-        let full_copy_budget = (limit.unwrap_or(0) as f64 * FULL_COPY_SHARE) as u64;
+        let full_copy_budget = limit.unwrap_or(0) / FULL_COPY_DIVISOR;
         // Work around a DuckDB bug: with a filter on one column and ORDER BY
         // another, compressed materialization trusts Parquet statistics the
         // filter invalidated (debug builds assert `min_val <= input`; release
@@ -177,7 +177,7 @@ impl Engine {
         self.files.get(&id).ok_or(AppError::UnknownFile(id))
     }
 
-    pub fn open(&mut self, path: &str) -> AppResult<OpenedFile> {
+    pub(crate) fn open(&mut self, path: &str) -> AppResult<OpenedFile> {
         let size_bytes = check_parquet_file(path)?;
 
         let (row_count, row_groups, created_by) = self
@@ -187,8 +187,8 @@ impl Engine {
                 [path],
                 |r| {
                     Ok((
-                        r.get::<_, i64>(0)?,
-                        r.get::<_, i64>(1)?,
+                        r.get::<_, u64>(0)?,
+                        r.get::<_, u64>(1)?,
                         r.get::<_, Option<String>>(2)?,
                     ))
                 },
@@ -227,8 +227,8 @@ impl Engine {
         let info = FileInfo {
             path: path.to_string(),
             size_bytes,
-            row_count: row_count as u64,
-            row_groups: row_groups as u64,
+            row_count,
+            row_groups,
             created_by,
             compression,
         };
@@ -250,14 +250,15 @@ impl Engine {
     /// the chunks' total uncompressed size.
     fn compression(&self, path: &str) -> AppResult<(Vec<String>, u64)> {
         let mut stmt = self.conn.prepare(
-            "SELECT compression, CAST(sum(total_uncompressed_size) AS BIGINT)              FROM parquet_metadata(?) GROUP BY compression ORDER BY compression",
+            "SELECT compression, CAST(sum(total_uncompressed_size) AS BIGINT) \
+             FROM parquet_metadata(?) GROUP BY compression ORDER BY compression",
         )?;
         let chunks = stmt
             .query_map([path], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+                Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?))
             })?
             .collect::<Result<Vec<_>, _>>()?;
-        let uncompressed = chunks.iter().map(|(_, size)| *size as u64).sum();
+        let uncompressed = chunks.iter().map(|(_, size)| size).sum();
         let codecs = chunks.into_iter().map(|(codec, _)| codec).collect();
         Ok((codecs, uncompressed))
     }
@@ -334,16 +335,18 @@ impl Engine {
         Ok(columns)
     }
 
-    pub fn schema(&self, id: FileId) -> AppResult<Vec<Column>> {
+    pub(crate) fn schema(&self, id: FileId) -> AppResult<Vec<Column>> {
         Ok(self.file(id)?.columns.list.clone())
     }
 
     /// Names of the scalar and aggregate functions and macros a query can
     /// call, sorted, for autocomplete. Leaves out operators such as `+` and
     /// internal functions named `__…`.
-    pub fn functions(&self) -> AppResult<Vec<String>> {
+    pub(crate) fn functions(&self) -> AppResult<Vec<String>> {
         let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT function_name FROM duckdb_functions() \n             WHERE function_type IN ('scalar', 'aggregate', 'macro') \n             AND regexp_full_match(function_name, '[a-z][a-z0-9_]*') ORDER BY 1",
+            "SELECT DISTINCT function_name FROM duckdb_functions() \
+             WHERE function_type IN ('scalar', 'aggregate', 'macro') \
+             AND regexp_full_match(function_name, '[a-z][a-z0-9_]*') ORDER BY 1",
         )?;
         let names = stmt
             .query_map([], |r| r.get(0))?
@@ -354,7 +357,7 @@ impl Engine {
     /// Rows `offset..offset + limit` of `view`, with the values of
     /// `columns` (indices into the schema) in that order. Reading fewer
     /// columns is much cheaper, since DuckDB decodes whole column chunks.
-    pub fn rows(
+    pub(crate) fn rows(
         &mut self,
         id: FileId,
         offset: u64,
@@ -396,7 +399,8 @@ impl Engine {
             // `select` is qualified, so a real `rowid` column cannot clash
             // with `p.rowid`.
             Source::RowNumbers(table) => format!(
-                "SELECT {select} FROM {table} p JOIN {} s ON s.{FILE_ROW} = p.{FILE_ROW}                  WHERE p.rowid >= {offset} AND p.rowid < {end} ORDER BY p.rowid",
+                "SELECT {select} FROM {table} p JOIN {} s ON s.{FILE_ROW} = p.{FILE_ROW} \
+                 WHERE p.rowid >= {offset} AND p.rowid < {end} ORDER BY p.rowid",
                 f.src
             ),
             Source::File if f.has_file_row => format!(
@@ -507,7 +511,7 @@ impl Engine {
     /// The columns `view` shows, without running it: for a column list,
     /// those of the query as a subquery, which DuckDB names the same as the
     /// materialized table (`a, a` becomes `a, a_1`).
-    pub fn view_schema(&self, id: FileId, view: &View) -> AppResult<Vec<Column>> {
+    pub(crate) fn view_schema(&self, id: FileId, view: &View) -> AppResult<Vec<Column>> {
         let f = self.file(id)?;
         if view.projection().is_none() || f.materialized(view).is_some() {
             return Ok(self.columns_of(id, view)?.list.clone());
@@ -522,27 +526,22 @@ impl Engine {
     fn create(&self, id: FileId, view: &View, table: &str, query: &str) -> AppResult<u64> {
         self.materialize(id, view, &format!("CREATE TEMP TABLE {table} AS {query}"))?;
         // `execute` reports 0 rows for CREATE TABLE AS, so count them.
-        let total: i64 =
+        let total: u64 =
             self.conn
                 .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?;
-        Ok(total as u64)
+        Ok(total)
     }
 
     /// Runs a `CREATE TABLE … AS` for `view`. A newer request for another
     /// view may interrupt it (see `Db::get_rows`).
     fn materialize(&self, id: FileId, view: &View, sql: &str) -> AppResult<()> {
-        *self.running.lock().unwrap() = Some(Running {
+        *lock(&self.running) = Some(Running {
             file_id: id,
             view: view.clone(),
             interrupted: false,
         });
         let result = self.conn.execute(sql, []);
-        let interrupted = self
-            .running
-            .lock()
-            .unwrap()
-            .take()
-            .is_some_and(|r| r.interrupted);
+        let interrupted = lock(&self.running).take().is_some_and(|r| r.interrupted);
         match result {
             Ok(_) => Ok(()),
             Err(_) if interrupted => Err(AppError::Cancelled),
@@ -553,7 +552,7 @@ impl Engine {
     /// `column`'s statistics from the Parquet footer, without a scan.
     /// `None` for nested columns, whose statistics belong to their leaf
     /// columns, and for files without row groups.
-    pub fn footer_stats(&self, id: FileId, column: &str) -> AppResult<Option<FooterStats>> {
+    pub(crate) fn footer_stats(&self, id: FileId, column: &str) -> AppResult<Option<FooterStats>> {
         let f = self.file(id)?;
         let i = column_index(&f.columns.list, column)?;
         if matches!(f.columns.kinds[i], Kind::Json) {
@@ -580,7 +579,7 @@ impl Engine {
                     min: if complete(1)? { r.get(2)? } else { None },
                     max: if complete(3)? { r.get(4)? } else { None },
                     null_count: if complete(5)? {
-                        r.get::<_, Option<i64>>(6)?.map(|n| n as u64)
+                        r.get::<_, Option<u64>>(6)?
                     } else {
                         None
                     },
@@ -590,7 +589,7 @@ impl Engine {
 
     /// Statistics of `column` over the rows of `view`. Scans the column,
     /// after materializing the view if it is not already.
-    pub fn column_profile(
+    pub(crate) fn column_profile(
         &mut self,
         id: FileId,
         column: &str,
@@ -618,8 +617,8 @@ impl Engine {
             [],
             |r| {
                 Ok((
-                    r.get::<_, i64>(0)? as u64,
-                    r.get::<_, i64>(1)? as u64,
+                    r.get::<_, u64>(0)?,
+                    r.get::<_, u64>(1)?,
                     r.get::<_, Option<String>>(2)?,
                     r.get::<_, Option<String>>(3)?,
                     r.get::<_, Option<f64>>(4)?,
@@ -640,10 +639,10 @@ impl Engine {
         ))?;
         let top_values = stmt
             .query_map([], |r| {
-                distinct_count = r.get::<_, i64>(2)? as u64;
+                distinct_count = r.get::<_, u64>(2)?;
                 Ok(ValueCount {
                     value: r.get(0)?,
-                    count: r.get::<_, i64>(1)? as u64,
+                    count: r.get::<_, u64>(1)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -670,6 +669,7 @@ impl Engine {
 
     /// Equal-width bins over `low..=high` for the numeric column `q`.
     /// Integers get at most one bin per value.
+    #[expect(clippy::float_cmp, reason = "exactly one distinct value")]
     fn histogram(
         &self,
         from: &str,
@@ -688,30 +688,35 @@ impl Engine {
         }
         let (span, bins) = if kind.is_integer() {
             let span = high - low + 1.0;
-            (span, span.min(HISTOGRAM_BINS as f64) as u64)
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "span is at least 2 and capped at `HISTOGRAM_BINS`"
+            )]
+            let bins = span.min(f64::from(HISTOGRAM_BINS)) as u32;
+            (span, bins)
         } else {
             (high - low, HISTOGRAM_BINS)
         };
-        let width = span / bins as f64;
+        let width = span / f64::from(bins);
         let mut counts = vec![0u64; bins as usize];
+        // For floats, the maximum lands one past the last bin, so clamp.
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT CAST(floor((CAST({q} AS DOUBLE) - ?) / ?) AS BIGINT), count(*) \
-             FROM {from} WHERE {q} IS NOT NULL GROUP BY ALL"
+            "SELECT least(greatest(CAST(floor((CAST({q} AS DOUBLE) - ?) / ?) AS BIGINT), 0), ?), \
+             count(*) FROM {from} WHERE {q} IS NOT NULL GROUP BY ALL"
         ))?;
-        let rows = stmt.query_map(duckdb::params![low, width], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)? as u64))
+        let rows = stmt.query_map(duckdb::params![low, width, bins - 1], |r| {
+            Ok((r.get::<_, usize>(0)?, r.get::<_, u64>(1)?))
         })?;
         for row in rows {
             let (bin, count) = row?;
-            // For floats, the maximum lands one past the last bin.
-            counts[bin.clamp(0, bins as i64 - 1) as usize] += count;
+            counts[bin] += count;
         }
-        Ok(counts
-            .into_iter()
-            .enumerate()
+        Ok((0..bins)
+            .zip(counts)
             .map(|(i, count)| Bin {
-                lower: low + i as f64 * width,
-                upper: low + (i + 1) as f64 * width,
+                lower: low + f64::from(i) * width,
+                upper: low + f64::from(i + 1) * width,
                 count,
             })
             .collect())
@@ -720,7 +725,7 @@ impl Engine {
     /// Writes `view` with the values of `columns` (indices into the schema)
     /// to a new file at `path`, as Parquet or CSV by its extension. Never
     /// writes over the open file itself.
-    pub fn export(
+    pub(crate) fn export(
         &mut self,
         id: FileId,
         view: &View,
@@ -791,7 +796,7 @@ impl Engine {
         Ok(())
     }
 
-    pub fn close(&mut self, id: FileId) -> AppResult<()> {
+    pub(crate) fn close(&mut self, id: FileId) -> AppResult<()> {
         let f = self.files.remove(&id).ok_or(AppError::UnknownFile(id))?;
         if let Some(m) = f.view {
             self.conn
@@ -901,13 +906,19 @@ fn check_parquet_file(path: &str) -> AppResult<u64> {
 // ---------------------------------------------------------------------------
 
 /// Parses a DuckDB memory setting such as `12.7 GiB` into bytes.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "DuckDB reports a positive size, and whole bytes suffice"
+)]
 fn setting_bytes(setting: &str) -> Option<u64> {
     let (value, unit) = setting.trim().split_once(' ')?;
     let value: f64 = value.parse().ok()?;
-    let power = ["bytes", "KiB", "MiB", "GiB", "TiB", "PiB"]
-        .iter()
-        .position(|u| *u == unit)?;
-    Some((value * 1024f64.powi(power as i32)) as u64)
+    let (_, power) = ["bytes", "KiB", "MiB", "GiB", "TiB", "PiB"]
+        .into_iter()
+        .zip(0..)
+        .find(|(u, _)| *u == unit)?;
+    Some((value * 1024f64.powi(power)) as u64)
 }
 
 /// The query for `view` over the file: `SELECT … FROM {src} {clause}`.
@@ -995,13 +1006,12 @@ fn select_expr(col: &Column, kind: Kind) -> String {
     let q = format!("s.{}", quote_ident(&col.name));
     match kind {
         Kind::Bool | Kind::Int | Kind::Float | Kind::Blob => q,
-        Kind::BigInt => format!("CAST({q} AS VARCHAR)"),
         Kind::Json => format!("CAST(to_json({q}) AS VARCHAR)"),
         // `2024-01-02 03:04:05+00` -> `2024-01-02T03:04:05+00` (ISO 8601).
         Kind::Text if col.duckdb_type.starts_with("TIMESTAMP") => {
             format!("replace(CAST({q} AS VARCHAR), ' ', 'T')")
         }
-        Kind::Text | Kind::Decimal => format!("CAST({q} AS VARCHAR)"),
+        Kind::BigInt | Kind::Text | Kind::Decimal => format!("CAST({q} AS VARCHAR)"),
     }
 }
 
@@ -1038,16 +1048,21 @@ fn big_int(s: &str) -> Json {
 }
 
 fn blob_preview(bytes: &[u8]) -> String {
-    let hex: String = bytes
-        .iter()
-        .take(BLOB_PREVIEW_BYTES)
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    if bytes.len() > BLOB_PREVIEW_BYTES {
-        format!("0x{hex}… ({} bytes)", bytes.len())
-    } else {
-        format!("0x{hex}")
+    let mut preview = String::from("0x");
+    for b in bytes.iter().take(BLOB_PREVIEW_BYTES) {
+        // Writing to a `String` cannot fail.
+        let _ = write!(preview, "{b:02x}");
     }
+    if bytes.len() > BLOB_PREVIEW_BYTES {
+        let _ = write!(preview, "… ({} bytes)", bytes.len());
+    }
+    preview
+}
+
+/// Locks `m`, recovering the data if a panicking job poisoned it: every
+/// guarded value here stays valid when an update is cut short.
+pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 // ---------------------------------------------------------------------------
@@ -1064,13 +1079,13 @@ struct Shared {
 }
 
 #[derive(Clone)]
-pub struct Db {
+pub(crate) struct Db {
     tx: mpsc::UnboundedSender<Job>,
     shared: Arc<Shared>,
 }
 
 impl Db {
-    pub fn start() -> AppResult<Self> {
+    pub(crate) fn start() -> AppResult<Self> {
         let engine = Engine::new()?;
         let shared = Arc::new(Shared {
             latest_seq: Mutex::default(),
@@ -1090,7 +1105,7 @@ impl Db {
     }
 
     /// Runs `f` on the worker thread and waits for its result.
-    pub async fn run<T, F>(&self, f: F) -> AppResult<T>
+    pub(crate) async fn run<T, F>(&self, f: F) -> AppResult<T>
     where
         T: Send + 'static,
         F: FnOnce(&mut Engine) -> AppResult<T> + Send + 'static,
@@ -1109,7 +1124,7 @@ impl Db {
     /// this one was queued, and interrupts a running materialization of a
     /// view the UI no longer shows. Requests without `seq` (copying a
     /// selection) always run and do not affect paging.
-    pub async fn get_rows(
+    pub(crate) async fn get_rows(
         &self,
         id: FileId,
         seq: Option<u64>,
@@ -1120,11 +1135,11 @@ impl Db {
     ) -> AppResult<Page> {
         if let Some(seq) = seq {
             {
-                let mut latest = self.shared.latest_seq.lock().unwrap();
+                let mut latest = lock(&self.shared.latest_seq);
                 let entry = latest.entry(id).or_insert(0);
                 *entry = (*entry).max(seq);
             }
-            let mut running = self.shared.running.lock().unwrap();
+            let mut running = lock(&self.shared.running);
             if let Some(r) = running
                 .as_mut()
                 .filter(|r| r.file_id == id && r.view != view)
@@ -1136,7 +1151,7 @@ impl Db {
         let shared = self.shared.clone();
         self.run(move |engine| {
             if let Some(seq) = seq {
-                let latest = shared.latest_seq.lock().unwrap().get(&id).copied();
+                let latest = lock(&shared.latest_seq).get(&id).copied();
                 if latest.is_some_and(|latest| seq < latest) {
                     return Err(AppError::Cancelled);
                 }
@@ -1146,8 +1161,8 @@ impl Db {
         .await
     }
 
-    pub async fn close(&self, id: FileId) -> AppResult<()> {
-        self.shared.latest_seq.lock().unwrap().remove(&id);
+    pub(crate) async fn close(&self, id: FileId) -> AppResult<()> {
+        lock(&self.shared.latest_seq).remove(&id);
         self.run(move |engine| engine.close(id)).await
     }
 }
